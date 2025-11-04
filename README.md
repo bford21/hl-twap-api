@@ -1,6 +1,6 @@
-# HL TWAP API
+# Hyperliquid TWAP Service
 
-Next.js API for managing cryptocurrency trade data with TWAP strategy tracking. Includes automated S3 data synchronization and deployment-ready configuration for Railway.
+Access and sort through all Hyperliquid TWAP transactions via API or web interface
 
 ## Features
 

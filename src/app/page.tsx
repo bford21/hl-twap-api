@@ -46,6 +46,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [coverage, setCoverage] = useState<CoverageInfo | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(true);
 
   // Fetch coverage info on mount and every 30 seconds
   useEffect(() => {
@@ -58,6 +59,8 @@ export default function Home() {
         }
       } catch (err) {
         console.error('Failed to fetch coverage:', err);
+      } finally {
+        setCoverageLoading(false);
       }
     };
 
@@ -65,6 +68,12 @@ export default function Home() {
     const interval = setInterval(fetchCoverage, 30000); // Update every 30 seconds
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-search on first load to show initial results
+  useEffect(() => {
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   const handleSearch = async () => {
     setLoading(true);
@@ -111,6 +120,12 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ marginBottom: '0.5rem' }}>Hyperliquid TWAP Trade Search</h1>
@@ -118,34 +133,41 @@ export default function Home() {
         </div>
         
         {/* Data Coverage Info */}
-        {coverage && (
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            color: 'white',
-            padding: '1rem 1.5rem', 
-            borderRadius: '8px',
-            minWidth: '280px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '0.75rem', opacity: 0.9, marginBottom: '0.5rem', fontWeight: '600', letterSpacing: '0.5px' }}>
-              DATA COVERAGE
-            </div>
-            {coverage.earliest_trade && coverage.latest_trade ? (
-              <>
-                <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
-                  {' → '}
-                  <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
-                </div>
-                <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                  {coverage.total_trades.toLocaleString()} trades
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: '0.9rem' }}>No data yet</div>
-            )}
+        <div style={{ 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+          color: 'white',
+          padding: '1rem 1.5rem', 
+          borderRadius: '8px',
+          minWidth: '280px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '0.75rem', opacity: 0.9, marginBottom: '0.5rem', fontWeight: '600', letterSpacing: '0.5px' }}>
+            DATA COVERAGE
           </div>
-        )}
+          {coverageLoading ? (
+            <>
+              <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                <div style={{ background: 'rgba(255,255,255,0.3)', height: '1.2rem', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
+              </div>
+              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
+                <div style={{ background: 'rgba(255,255,255,0.3)', height: '0.9rem', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
+              </div>
+            </>
+          ) : coverage && coverage.earliest_trade && coverage.latest_trade ? (
+            <>
+              <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
+                {' → '}
+                <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
+              </div>
+              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
+                {coverage.total_trades.toLocaleString()} trades
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: '0.9rem' }}>No data yet</div>
+          )}
+        </div>
       </div>
 
       {/* Search Form */}
@@ -506,7 +528,7 @@ export default function Home() {
               fontSize: '0.85rem',
               lineHeight: '1.5'
             }}>
-{`curl "https://your-app.railway.app/api/trades?twap_id=568722&limit=50"
+{`curl "https://twaptracker.xyz/api/trades?twap_id=568722&limit=50"
 
 # Response
 {
@@ -566,7 +588,7 @@ export default function Home() {
               fontSize: '0.85rem',
               lineHeight: '1.5'
             }}>
-{`curl "https://your-app.railway.app/api/twap"
+{`curl "https://twaptracker.xyz/api/twap"
 
 # Response
 {
@@ -613,7 +635,7 @@ export default function Home() {
               fontSize: '0.85rem',
               lineHeight: '1.5'
             }}>
-{`curl "https://your-app.railway.app/api/twap/568722"
+{`curl "https://twaptracker.xyz/api/twap/568722"
 
 # Response
 {
@@ -673,7 +695,7 @@ export default function Home() {
               fontSize: '0.85rem',
               lineHeight: '1.5'
             }}>
-{`curl "https://your-app.railway.app/api/trades/stats?hours=24"
+{`curl "https://twaptracker.xyz/api/trades/stats?hours=24"
 
 # Response
 {
@@ -728,7 +750,7 @@ export default function Home() {
               fontSize: '0.85rem',
               lineHeight: '1.5'
             }}>
-{`curl "https://your-app.railway.app/api/coverage"
+{`curl "https://twaptracker.xyz/api/coverage"
 
 # Response
 {
