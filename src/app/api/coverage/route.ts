@@ -8,72 +8,72 @@ export async function GET() {
     const { data, error } = await supabase.rpc('get_coverage_stats');
 
     if (error) {
-      // Fallback to manual query if function doesn't exist
-      console.log('RPC function not found, using direct SQL query');
-      
-      // Single efficient query using raw SQL
-      const query = `
-        SELECT 
-          (SELECT MIN(time) FROM trades) as earliest_trade,
-          (SELECT MAX(time) FROM trades) as latest_trade,
-          (SELECT COUNT(*) FROM trades) as total_trades,
-          (SELECT COUNT(DISTINCT trade_id) FROM trade_participants WHERE twap_id IS NOT NULL) as twap_trades,
-          (SELECT COUNT(DISTINCT twap_id) FROM trade_participants WHERE twap_id IS NOT NULL) as unique_twaps
-      `;
+      console.log('RPC function error, using fallback:', error.message);
+    }
 
-      const { data: statsData, error: statsError } = await supabase.rpc('exec_sql', { sql: query });
-      
-      if (statsError) {
-        // Final fallback - use separate optimized queries
-        const [tradesResult, twapResult] = await Promise.all([
-          // Get min/max/count from trades in one query
-          supabase.from('trades').select('time').order('time', { ascending: true }).limit(1),
-          // Get distinct count efficiently
-          supabase.from('trade_participants')
-            .select('twap_id', { count: 'exact', head: true })
-            .not('twap_id', 'is', null)
-        ]);
-
-        const { data: maxData } = await supabase
-          .from('trades')
-          .select('time')
-          .order('time', { ascending: false })
-          .limit(1);
-
-        const { count: totalCount } = await supabase
-          .from('trades')
-          .select('*', { count: 'exact', head: true });
-
-        // Use approximate count for unique TWAPs (much faster)
-        // This is acceptable for a coverage display
-        const uniqueTwapsEstimate = Math.ceil((twapResult.count || 0) / 10); // Rough estimate
-
-        return NextResponse.json({
-          earliest_trade: tradesResult.data?.[0]?.time || null,
-          latest_trade: maxData?.[0]?.time || null,
-          total_trades: totalCount || 0,
-          twap_trades: twapResult.count || 0,
-          unique_twaps: uniqueTwapsEstimate,
-          last_updated: new Date().toISOString(),
-        });
-      }
-
+    // Check if we got valid data from RPC
+    if (!error && data && Array.isArray(data) && data.length > 0 && data[0].total_trades !== undefined) {
+      const stats = data[0];
       return NextResponse.json({
-        earliest_trade: statsData?.[0]?.earliest_trade || null,
-        latest_trade: statsData?.[0]?.latest_trade || null,
-        total_trades: statsData?.[0]?.total_trades || 0,
-        twap_trades: statsData?.[0]?.twap_trades || 0,
-        unique_twaps: statsData?.[0]?.unique_twaps || 0,
+        earliest_trade: stats.earliest_trade || null,
+        latest_trade: stats.latest_trade || null,
+        total_trades: stats.total_trades || 0,
+        twap_trades: stats.twap_trades || 0,
+        unique_twaps: stats.unique_twaps || 0,
         last_updated: new Date().toISOString(),
       });
     }
 
+    // Fallback - use separate optimized queries
+    console.log('Using fallback queries for coverage stats');
+    
+    // Fetch all stats in parallel for better performance
+    const [tradesResult, maxData, totalCountResult, twapResult, uniqueTwapResult] = await Promise.all([
+      // Earliest trade
+      supabase.from('trades').select('time').order('time', { ascending: true }).limit(1),
+      // Latest trade
+      supabase.from('trades').select('time').order('time', { ascending: false }).limit(1),
+      // Total trade count
+      supabase.from('trades').select('*', { count: 'exact', head: true }),
+      // TWAP trade count (trades with at least one participant with twap_id)
+      supabase.from('trade_participants')
+        .select('twap_id', { count: 'exact', head: true })
+        .not('twap_id', 'is', null),
+      // Unique TWAP count - fetch all TWAPs in batches and count unique
+      (async () => {
+        const allTwapIds = new Set<number>();
+        let offset = 0;
+        const batchSize = 1000;
+        
+        while (true) {
+          const { data, error } = await supabase
+            .from('trade_participants')
+            .select('twap_id')
+            .not('twap_id', 'is', null)
+            .range(offset, offset + batchSize - 1);
+          
+          if (error || !data || data.length === 0) break;
+          
+          data.forEach(row => {
+            if (row.twap_id) allTwapIds.add(row.twap_id);
+          });
+          
+          // If we got less than batch size, we've reached the end
+          if (data.length < batchSize) break;
+          
+          offset += batchSize;
+        }
+        
+        return allTwapIds.size;
+      })()
+    ]);
+
     return NextResponse.json({
-      earliest_trade: data?.earliest_trade || null,
-      latest_trade: data?.latest_trade || null,
-      total_trades: data?.total_trades || 0,
-      twap_trades: data?.twap_trades || 0,
-      unique_twaps: data?.unique_twaps || 0,
+      earliest_trade: tradesResult.data?.[0]?.time || null,
+      latest_trade: maxData.data?.[0]?.time || null,
+      total_trades: totalCountResult.count || 0,
+      twap_trades: twapResult.count || 0,
+      unique_twaps: uniqueTwapResult,
       last_updated: new Date().toISOString(),
     });
   } catch (error) {

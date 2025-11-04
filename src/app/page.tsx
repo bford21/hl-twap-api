@@ -202,14 +202,14 @@ export default function Home() {
       {/* Search Form */}
       <div style={{ 
         background: '#f9f9f9', 
-        padding: '1.5rem', 
+        padding: '2rem', 
         borderRadius: '8px', 
         marginBottom: '2rem',
         border: '1px solid #e0e0e0'
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               TWAP ID
             </label>
             <input
@@ -219,16 +219,18 @@ export default function Home() {
               placeholder="568722"
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               Coin
             </label>
             <input
@@ -238,16 +240,18 @@ export default function Home() {
               placeholder="BTC"
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               Side
             </label>
             <select
@@ -255,10 +259,14 @@ export default function Home() {
               onChange={(e) => setFilters({ ...filters, side: e.target.value })}
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px',
+                backgroundColor: 'white',
+                cursor: 'pointer'
               }}
             >
               <option value="">All</option>
@@ -268,7 +276,7 @@ export default function Home() {
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               Limit
             </label>
             <input
@@ -280,18 +288,20 @@ export default function Home() {
               title="Results per page (large values may take longer)"
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               User Address
             </label>
             <input
@@ -301,16 +311,18 @@ export default function Home() {
               placeholder="0xabc..."
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               Start Time
             </label>
             <input
@@ -319,16 +331,18 @@ export default function Home() {
               onChange={(e) => setFilters({ ...filters, start_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}>
+            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
               End Time
             </label>
             <input
@@ -337,10 +351,12 @@ export default function Home() {
               onChange={(e) => setFilters({ ...filters, end_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
               style={{ 
                 width: '100%', 
-                padding: '0.5rem', 
+                padding: '0.625rem 0.75rem',
                 border: '1px solid #ddd', 
-                borderRadius: '4px',
-                fontSize: '0.95rem'
+                borderRadius: '6px',
+                fontSize: '0.95rem',
+                boxSizing: 'border-box',
+                height: '42px'
               }}
             />
           </div>
