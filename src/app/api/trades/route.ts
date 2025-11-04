@@ -7,13 +7,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const coin = searchParams.get('coin');
     const side = searchParams.get('side');
-    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    const requestedLimit = parseInt(searchParams.get('limit') || '100', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const user = searchParams.get('user');
     const twapId = searchParams.get('twap_id');
     const startTime = searchParams.get('start_time');
     const endTime = searchParams.get('end_time');
     const includeParticipants = searchParams.get('include_participants') !== 'false';
+    
+    // Supabase has a 1000 record limit per query
+    const SUPABASE_MAX = 1000;
+    const needsPagination = requestedLimit > SUPABASE_MAX;
 
     // If filtering by user or twap_id, we need to start with participants
     if (user || twapId) {
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           data: [],
           count: 0,
-          limit,
+          limit: requestedLimit,
           offset,
         });
       }
@@ -87,13 +91,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           data: [],
           count: 0,
-          limit,
+          limit: requestedLimit,
           offset,
         });
       }
 
       // Apply pagination manually after filtering
-      const paginatedTrades = allTrades.slice(offset, offset + limit);
+      const paginatedTrades = allTrades.slice(offset, offset + requestedLimit);
 
       // Attach participants if requested
       if (includeParticipants) {
@@ -118,7 +122,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           data: tradesWithParticipants,
           count: allTrades.length,
-          limit,
+          limit: requestedLimit,
           offset,
         });
       }
@@ -126,51 +130,128 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         data: paginatedTrades,
         count: allTrades.length,
-        limit,
+        limit: requestedLimit,
         offset,
       });
     }
 
     // No user/twap filter - standard query
+    // Handle pagination if limit > 1000 (Supabase max)
+    if (needsPagination) {
+      const allTrades: any[] = [];
+      let totalCount = 0;
+      let remainingLimit = requestedLimit;
+      let currentOffset = offset;
+
+      // Fetch in batches of 1000
+      while (remainingLimit > 0) {
+        const batchLimit = Math.min(remainingLimit, SUPABASE_MAX);
+        
+        let query = supabase
+          .from('trades')
+          .select('*', { count: currentOffset === offset ? 'exact' : undefined })
+          .order('time', { ascending: false })
+          .range(currentOffset, currentOffset + batchLimit - 1);
+
+        if (coin) query = query.eq('coin', coin.toUpperCase());
+        if (side && (side === 'A' || side === 'B')) query = query.eq('side', side);
+        if (startTime) query = query.gte('time', startTime);
+        if (endTime) query = query.lte('time', endTime);
+
+        const { data: batchTrades, error, count } = await query;
+
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (currentOffset === offset && count) {
+          totalCount = count;
+        }
+
+        if (!batchTrades || batchTrades.length === 0) {
+          break;
+        }
+
+        allTrades.push(...batchTrades);
+        remainingLimit -= batchTrades.length;
+        currentOffset += batchTrades.length;
+
+        // If we got fewer than requested, we've reached the end
+        if (batchTrades.length < batchLimit) {
+          break;
+        }
+      }
+
+      // Handle participants for paginated results
+      if (includeParticipants && allTrades.length > 0) {
+        const tradeIds = allTrades.map(t => t.id);
+        
+        // Also paginate participants fetch if needed (in batches)
+        const allParticipants: any[] = [];
+        for (let i = 0; i < tradeIds.length; i += SUPABASE_MAX) {
+          const batchIds = tradeIds.slice(i, i + SUPABASE_MAX);
+          const { data: participants } = await supabase
+            .from('trade_participants')
+            .select('*')
+            .in('trade_id', batchIds);
+          
+          if (participants) {
+            allParticipants.push(...participants);
+          }
+        }
+
+        const participantsByTrade = new Map<number, any[]>();
+        allParticipants.forEach(p => {
+          if (!participantsByTrade.has(p.trade_id)) {
+            participantsByTrade.set(p.trade_id, []);
+          }
+          participantsByTrade.get(p.trade_id)!.push(p);
+        });
+
+        const tradesWithParticipants = allTrades.map(trade => ({
+          ...trade,
+          participants: participantsByTrade.get(trade.id) || [],
+        }));
+
+        return NextResponse.json({
+          data: tradesWithParticipants,
+          count: totalCount || allTrades.length,
+          limit: requestedLimit,
+          offset,
+        });
+      }
+
+      return NextResponse.json({
+        data: allTrades,
+        count: totalCount || allTrades.length,
+        limit: requestedLimit,
+        offset,
+      });
+    }
+
+    // Single query (limit <= 1000)
     let query = supabase
       .from('trades')
       .select('*', { count: 'exact' })
       .order('time', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .range(offset, offset + requestedLimit - 1);
 
-    // Filter by coin
-    if (coin) {
-      query = query.eq('coin', coin.toUpperCase());
-    }
-
-    // Filter by side (A or B)
-    if (side && (side === 'A' || side === 'B')) {
-      query = query.eq('side', side);
-    }
-
-    // Filter by time range
-    if (startTime) {
-      query = query.gte('time', startTime);
-    }
-
-    if (endTime) {
-      query = query.lte('time', endTime);
-    }
+    if (coin) query = query.eq('coin', coin.toUpperCase());
+    if (side && (side === 'A' || side === 'B')) query = query.eq('side', side);
+    if (startTime) query = query.gte('time', startTime);
+    if (endTime) query = query.lte('time', endTime);
 
     const { data: trades, error, count } = await query;
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (!trades || trades.length === 0) {
       return NextResponse.json({
         data: [],
         count: 0,
-        limit,
+        limit: requestedLimit,
         offset,
       });
     }
@@ -201,7 +282,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           data: tradesWithParticipants,
           count: count || 0,
-          limit,
+          limit: requestedLimit,
           offset,
         });
       }
@@ -210,7 +291,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: trades,
       count: count || 0,
-      limit,
+      limit: requestedLimit,
       offset,
     });
   } catch (error) {

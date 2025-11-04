@@ -9,22 +9,39 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
-    // Get distinct TWAP IDs with trade counts
-    let query = supabase
-      .from('trade_participants')
-      .select('twap_id, trade_id')
-      .not('twap_id', 'is', null);
+    // Fetch ALL participants with non-null twap_id in batches (Supabase has 1000 limit)
+    const SUPABASE_MAX = 1000;
+    const allParticipants: any[] = [];
+    let currentOffset = 0;
+    
+    while (true) {
+      const { data: batch, error } = await supabase
+        .from('trade_participants')
+        .select('twap_id, trade_id')
+        .not('twap_id', 'is', null)
+        .range(currentOffset, currentOffset + SUPABASE_MAX - 1);
 
-    const { data: participants, error } = await query;
+      if (error) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
 
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      if (!batch || batch.length === 0) {
+        break;
+      }
+
+      allParticipants.push(...batch);
+      currentOffset += batch.length;
+
+      // If we got fewer than requested, we've reached the end
+      if (batch.length < SUPABASE_MAX) {
+        break;
+      }
     }
 
-    if (!participants || participants.length === 0) {
+    if (allParticipants.length === 0) {
       return NextResponse.json({
         data: [],
         count: 0,
@@ -32,6 +49,8 @@ export async function GET(request: NextRequest) {
         offset,
       });
     }
+
+    const participants = allParticipants;
 
     // Group by TWAP ID and count trades
     const twapStats = new Map<number, Set<number>>();
@@ -55,20 +74,29 @@ export async function GET(request: NextRequest) {
       const allTradeIds = Array.from(twapStats.values())
         .flatMap(set => Array.from(set));
 
-      const { data: trades, error: tradesError } = await supabase
-        .from('trades')
-        .select('id, coin')
-        .in('id', allTradeIds)
-        .eq('coin', coin.toUpperCase());
+      // Fetch trades in batches (Supabase limit)
+      const allTrades: any[] = [];
+      for (let i = 0; i < allTradeIds.length; i += SUPABASE_MAX) {
+        const batchIds = allTradeIds.slice(i, i + SUPABASE_MAX);
+        const { data: trades, error: tradesError } = await supabase
+          .from('trades')
+          .select('id, coin')
+          .in('id', batchIds)
+          .eq('coin', coin.toUpperCase());
 
-      if (tradesError) {
-        return NextResponse.json(
-          { error: tradesError.message },
-          { status: 500 }
-        );
+        if (tradesError) {
+          return NextResponse.json(
+            { error: tradesError.message },
+            { status: 500 }
+          );
+        }
+
+        if (trades) {
+          allTrades.push(...trades);
+        }
       }
 
-      const coinTradeIds = new Set(trades?.map(t => t.id) || []);
+      const coinTradeIds = new Set(allTrades.map(t => t.id));
 
       // Recalculate stats for filtered trades
       twapStats.clear();
