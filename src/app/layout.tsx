@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'HL TWAP API',
-  description: 'TWAP data API with Supabase and S3 integration',
+    title: 'Hyperliquid TWAP API',
+    description: 'Explore Hyperliquid TWAP data',
 }
 
 export default function RootLayout({
