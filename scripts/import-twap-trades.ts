@@ -80,60 +80,71 @@ function findAllFiles(dir: string): string[] {
   return files;
 }
 
-async function insertTrade(record: TradeRecord): Promise<boolean> {
+async function insertTradesBatch(records: TradeRecord[]): Promise<number> {
+  if (records.length === 0) return 0;
+
   try {
-    // Insert trade first
-    const { data: tradeData, error: tradeError } = await supabase
-      .from('trades')
-      .insert({
-        coin: record.coin,
-        side: record.side,
-        time: record.time,
-        px: parseFloat(record.px),
-        sz: parseFloat(record.sz),
-        hash: record.hash,
-        trade_dir_override: record.trade_dir_override,
-      })
-      .select()
-      .single();
-
-    if (tradeError || !tradeData) {
-      console.error(`  ❌ Error inserting trade:`, tradeError?.message);
-      return false;
-    }
-
-    // Insert participants
-    const participantRecords = record.side_info.map(si => ({
-      trade_id: tradeData.id,
-      user_address: si.user,
-      start_pos: parseFloat(si.start_pos),
-      oid: si.oid,
-      twap_id: si.twap_id,
-      cloid: si.cloid,
+    // Step 1: Insert all trades in one batch
+    const tradeRecords = records.map(record => ({
+      coin: record.coin,
+      side: record.side,
+      time: record.time,
+      px: parseFloat(record.px),
+      sz: parseFloat(record.sz),
+      hash: record.hash,
+      trade_dir_override: record.trade_dir_override,
     }));
 
-    const { error: participantError } = await supabase
-      .from('trade_participants')
-      .insert(participantRecords);
+    const { data: insertedTrades, error: tradeError } = await supabase
+      .from('trades')
+      .insert(tradeRecords)
+      .select('id');
 
-    if (participantError) {
-      console.error(`  ❌ Error inserting participants:`, participantError.message);
-      // Rollback trade
-      await supabase.from('trades').delete().eq('id', tradeData.id);
-      return false;
+    if (tradeError || !insertedTrades) {
+      console.error(`  ❌ Error inserting trade batch:`, tradeError?.message);
+      return 0;
     }
 
-    return true;
+    // Step 2: Build all participant records with their corresponding trade_ids
+    const allParticipants = [];
+    for (let i = 0; i < records.length; i++) {
+      const tradeId = insertedTrades[i].id;
+      const participants = records[i].side_info.map(si => ({
+        trade_id: tradeId,
+        user_address: si.user,
+        start_pos: parseFloat(si.start_pos),
+        oid: si.oid,
+        twap_id: si.twap_id,
+        cloid: si.cloid,
+      }));
+      allParticipants.push(...participants);
+    }
+
+    // Step 3: Insert all participants in one batch
+    const { error: participantError } = await supabase
+      .from('trade_participants')
+      .insert(allParticipants);
+
+    if (participantError) {
+      console.error(`  ❌ Error inserting participant batch:`, participantError.message);
+      // Clean up trades on error
+      const tradeIds = insertedTrades.map(t => t.id);
+      await supabase.from('trades').delete().in('id', tradeIds);
+      return 0;
+    }
+
+    return insertedTrades.length;
   } catch (error) {
-    console.error(`  ❌ Error processing trade:`, error);
-    return false;
+    console.error(`  ❌ Error processing batch:`, error);
+    return 0;
   }
 }
 
 async function processFile(
   filePath: string,
   stats: ImportStats,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  batchSize: number = 500
 ): Promise<void> {
   const relativePath = path.relative(process.cwd(), filePath);
   console.log(`\n📄 Processing: ${relativePath}`);
@@ -146,6 +157,7 @@ async function processFile(
     
     let tradesWithTwapInFile = 0;
     let insertedInFile = 0;
+    const batchToInsert: TradeRecord[] = [];
     
     for (const line of lines) {
       try {
@@ -157,12 +169,17 @@ async function processFile(
           stats.tradesWithTwap++;
           
           if (!dryRun) {
-            const success = await insertTrade(record);
-            if (success) {
-              stats.tradesInserted++;
-              insertedInFile++;
-            } else {
-              stats.errors++;
+            batchToInsert.push(record);
+            
+            // Insert batch when it reaches batchSize
+            if (batchToInsert.length >= batchSize) {
+              const inserted = await insertTradesBatch(batchToInsert);
+              stats.tradesInserted += inserted;
+              insertedInFile += inserted;
+              if (inserted < batchToInsert.length) {
+                stats.errors += (batchToInsert.length - inserted);
+              }
+              batchToInsert.length = 0; // Clear batch
             }
           } else {
             stats.tradesInserted++; // Count for dry run
@@ -173,6 +190,16 @@ async function processFile(
       } catch (error) {
         stats.errors++;
         // Continue processing other lines
+      }
+    }
+    
+    // Insert remaining trades in batch
+    if (!dryRun && batchToInsert.length > 0) {
+      const inserted = await insertTradesBatch(batchToInsert);
+      stats.tradesInserted += inserted;
+      insertedInFile += inserted;
+      if (inserted < batchToInsert.length) {
+        stats.errors += (batchToInsert.length - inserted);
       }
     }
     
@@ -220,11 +247,14 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
   const hourlyDir = args.find(arg => !arg.startsWith('--')) || './test_files/hourly';
+  const batchSizeArg = args.find(arg => arg.startsWith('--batch-size='));
+  const batchSize = batchSizeArg ? parseInt(batchSizeArg.split('=')[1]) : 500;
   
   console.log('🚀 TWAP Trade Import Script');
   console.log('='.repeat(70));
   console.log(`Source directory: ${hourlyDir}`);
   console.log(`Mode: ${dryRun ? 'DRY RUN (no data will be inserted)' : 'LIVE IMPORT'}`);
+  console.log(`Batch size: ${batchSize} trades per insert`);
   console.log(`Filter: Only trades with non-null twap_id`);
   console.log('='.repeat(70));
 
@@ -262,7 +292,7 @@ async function main() {
 
   // Process files
   for (let i = 0; i < files.length; i++) {
-    await processFile(files[i], stats, dryRun);
+    await processFile(files[i], stats, dryRun, batchSize);
     
     // Print progress every 10 files
     if ((i + 1) % 10 === 0 || i === files.length - 1) {

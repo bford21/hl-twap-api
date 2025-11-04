@@ -5,6 +5,7 @@ Next.js API for managing cryptocurrency trade data with TWAP strategy tracking. 
 ## Features
 
 - 🔍 **Query trades by TWAP ID** - Fast indexed queries on TWAP strategies
+- 🖥️ **Web Search Interface** - Simple UI homepage for graphical queries
 - 📊 **RESTful API** - Get trades, filter by coin/user/TWAP
 - 🗄️ **Normalized database** - Supabase with optimized schema
 - ☁️ **S3 integration** - Automated data sync from AWS S3
@@ -95,6 +96,8 @@ Visit http://localhost:3000
 GET /api/trades?twap_id=568722
 GET /api/trades?coin=BTC&limit=100
 GET /api/trades?user=0xabc...
+GET /api/trades?start_time=2025-03-22T00:00:00Z&end_time=2025-03-22T23:59:59Z
+GET /api/trades?twap_id=568722&start_time=2025-03-22T10:00:00Z
 ```
 
 ### Get TWAP Details

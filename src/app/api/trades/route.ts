@@ -11,51 +11,16 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const user = searchParams.get('user');
     const twapId = searchParams.get('twap_id');
+    const startTime = searchParams.get('start_time');
+    const endTime = searchParams.get('end_time');
     const includeParticipants = searchParams.get('include_participants') !== 'false';
 
-    // Base query
-    let query = supabase
-      .from('trades')
-      .select('*', { count: 'exact' })
-      .order('time', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    // Filter by coin
-    if (coin) {
-      query = query.eq('coin', coin.toUpperCase());
-    }
-
-    // Filter by side (A or B)
-    if (side && (side === 'A' || side === 'B')) {
-      query = query.eq('side', side);
-    }
-
-    const { data: trades, error, count } = await query;
-
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-
-    if (!trades || trades.length === 0) {
-      return NextResponse.json({
-        data: [],
-        count: 0,
-        limit,
-        offset,
-      });
-    }
-
-    // If filtering by user or twap_id, we need to join with participants
+    // If filtering by user or twap_id, we need to start with participants
     if (user || twapId) {
-      const tradeIds = trades.map(t => t.id);
-      
+      // Step 1: Find matching participants
       let participantQuery = supabase
         .from('trade_participants')
-        .select('*')
-        .in('trade_id', tradeIds);
+        .select('trade_id, *');
 
       if (user) {
         participantQuery = participantQuery.eq('user_address', user.toLowerCase());
@@ -74,36 +39,137 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Filter trades to only those matching the participant criteria
-      const matchingTradeIds = new Set(participants?.map(p => p.trade_id) || []);
-      const filteredTrades = trades.filter(t => matchingTradeIds.has(t.id));
+      if (!participants || participants.length === 0) {
+        return NextResponse.json({
+          data: [],
+          count: 0,
+          limit,
+          offset,
+        });
+      }
+
+      // Step 2: Get unique trade IDs
+      const tradeIds = Array.from(new Set(participants.map(p => p.trade_id)));
+
+      // Step 3: Fetch the actual trades with filters
+      let tradeQuery = supabase
+        .from('trades')
+        .select('*')
+        .in('id', tradeIds)
+        .order('time', { ascending: false });
+
+      if (coin) {
+        tradeQuery = tradeQuery.eq('coin', coin.toUpperCase());
+      }
+
+      if (side && (side === 'A' || side === 'B')) {
+        tradeQuery = tradeQuery.eq('side', side);
+      }
+
+      if (startTime) {
+        tradeQuery = tradeQuery.gte('time', startTime);
+      }
+
+      if (endTime) {
+        tradeQuery = tradeQuery.lte('time', endTime);
+      }
+
+      const { data: allTrades, error: tradeError } = await tradeQuery;
+
+      if (tradeError) {
+        return NextResponse.json(
+          { error: tradeError.message },
+          { status: 500 }
+        );
+      }
+
+      if (!allTrades || allTrades.length === 0) {
+        return NextResponse.json({
+          data: [],
+          count: 0,
+          limit,
+          offset,
+        });
+      }
+
+      // Apply pagination manually after filtering
+      const paginatedTrades = allTrades.slice(offset, offset + limit);
 
       // Attach participants if requested
-      if (includeParticipants && participants) {
+      if (includeParticipants) {
+        const paginatedTradeIds = paginatedTrades.map(t => t.id);
+        const relevantParticipants = participants.filter(p => 
+          paginatedTradeIds.includes(p.trade_id)
+        );
+
         const participantsByTrade = new Map<number, any[]>();
-        participants.forEach(p => {
+        relevantParticipants.forEach(p => {
           if (!participantsByTrade.has(p.trade_id)) {
             participantsByTrade.set(p.trade_id, []);
           }
           participantsByTrade.get(p.trade_id)!.push(p);
         });
 
-        const tradesWithParticipants = filteredTrades.map(trade => ({
+        const tradesWithParticipants = paginatedTrades.map(trade => ({
           ...trade,
           participants: participantsByTrade.get(trade.id) || [],
         }));
 
         return NextResponse.json({
           data: tradesWithParticipants,
-          count: filteredTrades.length,
+          count: allTrades.length,
           limit,
           offset,
         });
       }
 
       return NextResponse.json({
-        data: filteredTrades,
-        count: filteredTrades.length,
+        data: paginatedTrades,
+        count: allTrades.length,
+        limit,
+        offset,
+      });
+    }
+
+    // No user/twap filter - standard query
+    let query = supabase
+      .from('trades')
+      .select('*', { count: 'exact' })
+      .order('time', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Filter by coin
+    if (coin) {
+      query = query.eq('coin', coin.toUpperCase());
+    }
+
+    // Filter by side (A or B)
+    if (side && (side === 'A' || side === 'B')) {
+      query = query.eq('side', side);
+    }
+
+    // Filter by time range
+    if (startTime) {
+      query = query.gte('time', startTime);
+    }
+
+    if (endTime) {
+      query = query.lte('time', endTime);
+    }
+
+    const { data: trades, error, count } = await query;
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    if (!trades || trades.length === 0) {
+      return NextResponse.json({
+        data: [],
+        count: 0,
         limit,
         offset,
       });
