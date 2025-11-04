@@ -47,6 +47,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [coverage, setCoverage] = useState<CoverageInfo | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Fetch coverage info on mount and every 30 seconds
   useEffect(() => {
@@ -54,8 +55,11 @@ export default function Home() {
       try {
         const response = await fetch('/api/coverage');
         const data = await response.json();
-        if (response.ok) {
+        if (response.ok && data) {
+          console.log('Coverage data:', data);
           setCoverage(data);
+        } else {
+          console.error('Coverage API error:', data);
         }
       } catch (err) {
         console.error('Failed to fetch coverage:', err);
@@ -69,24 +73,25 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-search on first load to show initial results
-  useEffect(() => {
-    handleSearch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
-
-  const handleSearch = async () => {
+  const handleSearch = async (page: number = 1) => {
     setLoading(true);
     setError('');
 
     try {
       const params = new URLSearchParams();
       
+      // Calculate offset based on page and limit
+      const limit = parseInt(filters.limit);
+      const offset = (page - 1) * limit;
+      
       Object.entries(filters).forEach(([key, value]) => {
         if (value) {
           params.append(key, value);
         }
       });
+      
+      // Add offset for pagination
+      params.set('offset', offset.toString());
 
       const response = await fetch(`/api/trades?${params.toString()}`);
       const data = await response.json();
@@ -96,6 +101,10 @@ export default function Home() {
       }
 
       setResults(data);
+      setCurrentPage(page);
+      
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setResults(null);
@@ -116,6 +125,7 @@ export default function Home() {
     });
     setResults(null);
     setError('');
+    setCurrentPage(1);
   };
 
   return (
@@ -153,19 +163,27 @@ export default function Home() {
                 <div style={{ background: 'rgba(255,255,255,0.3)', height: '0.9rem', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
               </div>
             </>
-          ) : coverage && coverage.earliest_trade && coverage.latest_trade ? (
+          ) : coverage ? (
             <>
-              <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
-                {' → '}
-                <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
-              </div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                {coverage.total_trades.toLocaleString()} trades
-              </div>
+              {coverage.earliest_trade && coverage.latest_trade ? (
+                <>
+                  <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                    <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
+                    {' → '}
+                    <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
+                    {coverage.total_trades?.toLocaleString() || 0} trades
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.9rem' }}>
+                  {coverage.total_trades > 0 ? `${coverage.total_trades.toLocaleString()} trades` : 'No data yet'}
+                </div>
+              )}
             </>
           ) : (
-            <div style={{ fontSize: '0.9rem' }}>No data yet</div>
+            <div style={{ fontSize: '0.9rem' }}>Loading...</div>
           )}
         </div>
       </div>
@@ -318,7 +336,7 @@ export default function Home() {
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
-            onClick={handleSearch}
+            onClick={() => handleSearch(1)}
             disabled={loading}
             style={{
               padding: '0.75rem 2rem',
@@ -392,9 +410,16 @@ export default function Home() {
       {/* Results */}
       {results && (
         <div>
-          <h2 style={{ marginBottom: '1rem' }}>
-            Results <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({results.count} trades found)</span>
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h2 style={{ margin: 0 }}>
+              Results <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({results.count} total)</span>
+            </h2>
+            {results.data.length > 0 && (
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                Showing {((currentPage - 1) * parseInt(filters.limit)) + 1} - {Math.min(currentPage * parseInt(filters.limit), results.count)} of {results.count}
+              </div>
+            )}
+          </div>
 
           {results.data.length === 0 ? (
             <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>No trades found matching your criteria</p>
@@ -465,6 +490,100 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {results.data.length > 0 && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginTop: '2rem',
+              padding: '1rem',
+              background: '#f9f9f9',
+              borderRadius: '8px',
+              flexWrap: 'wrap',
+              gap: '1rem'
+            }}>
+              <button
+                onClick={() => handleSearch(currentPage - 1)}
+                disabled={currentPage === 1 || loading}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  background: currentPage === 1 || loading ? '#e5e5e5' : '#000',
+                  color: currentPage === 1 || loading ? '#999' : 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: currentPage === 1 || loading ? 'not-allowed' : 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500'
+                }}
+              >
+                ← Previous
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                  Page {currentPage} of {Math.ceil(results.count / parseInt(filters.limit))}
+                </span>
+                {Math.ceil(results.count / parseInt(filters.limit)) > 1 && (
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    {Array.from({ length: Math.min(5, Math.ceil(results.count / parseInt(filters.limit))) }, (_, i) => {
+                      const totalPages = Math.ceil(results.count / parseInt(filters.limit));
+                      let pageNum;
+                      
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handleSearch(pageNum)}
+                          disabled={loading}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            background: currentPage === pageNum ? '#667eea' : 'white',
+                            color: currentPage === pageNum ? 'white' : '#333',
+                            border: currentPage === pageNum ? 'none' : '1px solid #ddd',
+                            borderRadius: '4px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: currentPage === pageNum ? '600' : '400',
+                            minWidth: '2rem'
+                          }}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => handleSearch(currentPage + 1)}
+                disabled={currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  background: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? '#e5e5e5' : '#000',
+                  color: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? '#999' : 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? 'not-allowed' : 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '500'
+                }}
+              >
+                Next →
+              </button>
             </div>
           )}
         </div>
