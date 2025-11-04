@@ -39,7 +39,7 @@ export async function GET(
     }
 
     // Get all unique trade IDs
-    const tradeIds = [...new Set(participants.map(p => p.trade_id))];
+    const tradeIds = Array.from(new Set(participants.map(p => p.trade_id)));
 
     // Get the trades
     const { data: trades, error: tradesError } = await supabase
@@ -96,7 +96,7 @@ function calculateTwapStatistics(trades: any[], participants: any[]) {
   const times = trades.map(t => new Date(t.time).getTime());
 
   // Get the user address(es) associated with this TWAP
-  const users = [...new Set(participants.map(p => p.user_address))];
+  const users = Array.from(new Set(participants.map(p => p.user_address)));
 
   return {
     user_addresses: users,
