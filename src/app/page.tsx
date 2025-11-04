@@ -434,6 +434,7 @@ export default function Home() {
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Price</th>
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Size</th>
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Value</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>User Addresses</th>
                     <th style={{ padding: '0.75rem', textAlign: 'center' }}>TWAP IDs</th>
                   </tr>
                 </thead>
@@ -464,6 +465,32 @@ export default function Home() {
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
                         ${(trade.px * trade.sz).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'left' }}>
+                        {trade.participants && trade.participants.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            {Array.from(new Set(trade.participants.map(p => p.user_address))).map((address) => (
+                              <code 
+                                key={address} 
+                                style={{ 
+                                  fontSize: '0.75rem',
+                                  background: '#f5f5f5',
+                                  padding: '0.2rem 0.4rem',
+                                  borderRadius: '3px',
+                                  color: '#555',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '180px',
+                                  display: 'block'
+                                }}
+                                title={address}
+                              >
+                                {address.slice(0, 6)}...{address.slice(-4)}
+                              </code>
+                            ))}
+                          </div>
+                        ) : '-'}
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                         {trade.participants && trade.participants.length > 0 ? (
