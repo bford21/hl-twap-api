@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// Force dynamic rendering - don't try to pre-render at build time
+export const dynamic = 'force-dynamic';
+
 // GET /api/coverage - Get data coverage information
 export async function GET() {
   try {

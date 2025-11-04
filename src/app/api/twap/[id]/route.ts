@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// Force dynamic rendering - API routes should not be pre-rendered
+export const dynamic = 'force-dynamic';
+
 // GET /api/twap/[id] - Get all trades for a specific TWAP ID
 export async function GET(
   request: NextRequest,
