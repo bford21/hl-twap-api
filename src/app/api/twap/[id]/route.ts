@@ -11,6 +11,9 @@ export async function GET(
 ) {
   try {
     const twapId = parseInt(params.id);
+    const searchParams = request.nextUrl.searchParams;
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 100); // Max 100
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     if (isNaN(twapId)) {
       return NextResponse.json(
@@ -19,11 +22,31 @@ export async function GET(
       );
     }
 
-    // Get all participants with this TWAP ID
+    // Get total count of participants for this TWAP (for statistics later)
+    const { count: totalParticipants } = await supabase
+      .from('trade_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('twap_id', twapId);
+
+    if (!totalParticipants || totalParticipants === 0) {
+      return NextResponse.json({
+        twap_id: twapId,
+        trades: [],
+        count: 0,
+        limit,
+        offset,
+        statistics: null,
+      });
+    }
+
+    // Get only the participants we need for the paginated trades (limit + offset)
+    // Fetch more participants than limit to ensure we have enough unique trade_ids
     const { data: participants, error: partError } = await supabase
       .from('trade_participants')
       .select('*')
-      .eq('twap_id', twapId);
+      .eq('twap_id', twapId)
+      .order('created_at', { ascending: false })
+      .limit(Math.min((limit + offset) * 2, 1000)); // Fetch up to 2x what we need, max 1000
 
     if (partError) {
       return NextResponse.json(
@@ -37,19 +60,22 @@ export async function GET(
         twap_id: twapId,
         trades: [],
         count: 0,
+        limit,
+        offset,
         statistics: null,
       });
     }
 
-    // Get all unique trade IDs
+    // Get unique trade IDs from the limited participants
     const tradeIds = Array.from(new Set(participants.map(p => p.trade_id)));
 
-    // Get the trades
+    // Get the trades with pagination
     const { data: trades, error: tradesError } = await supabase
       .from('trades')
       .select('*')
       .in('id', tradeIds)
-      .order('time', { ascending: false });
+      .order('time', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (tradesError) {
       return NextResponse.json(
@@ -78,7 +104,10 @@ export async function GET(
     return NextResponse.json({
       twap_id: twapId,
       trades: tradesWithParticipants,
-      count: tradesWithParticipants.length,
+      count: tradeIds.length, // Count of unique trades (approximate due to pagination)
+      total_participants: totalParticipants, // Total participants count
+      limit,
+      offset,
       statistics: stats,
     });
   } catch (error) {

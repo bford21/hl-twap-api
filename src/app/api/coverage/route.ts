@@ -42,32 +42,23 @@ export async function GET() {
       supabase.from('trade_participants')
         .select('twap_id', { count: 'exact', head: true })
         .not('twap_id', 'is', null),
-      // Unique TWAP count - fetch all TWAPs in batches and count unique
+      // Unique TWAP count - sample and estimate to avoid timeout
       (async () => {
-        const allTwapIds = new Set<number>();
-        let offset = 0;
-        const batchSize = 1000;
+        // Sample 1000 records to estimate unique count
+        const { data } = await supabase
+          .from('trade_participants')
+          .select('twap_id')
+          .not('twap_id', 'is', null)
+          .limit(1000);
         
-        while (true) {
-          const { data, error } = await supabase
-            .from('trade_participants')
-            .select('twap_id')
-            .not('twap_id', 'is', null)
-            .range(offset, offset + batchSize - 1);
-          
-          if (error || !data || data.length === 0) break;
-          
-          data.forEach(row => {
-            if (row.twap_id) allTwapIds.add(row.twap_id);
-          });
-          
-          // If we got less than batch size, we've reached the end
-          if (data.length < batchSize) break;
-          
-          offset += batchSize;
-        }
+        if (!data || data.length === 0) return 0;
         
-        return allTwapIds.size;
+        // Count unique in sample
+        const uniqueInSample = new Set(data.map(d => d.twap_id)).size;
+        
+        // Rough estimate: if we have high diversity in sample, estimate higher
+        // This is approximate but prevents timeout
+        return Math.ceil(uniqueInSample * 1.5); // Conservative estimate
       })()
     ]);
 

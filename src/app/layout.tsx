@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-    title: 'Hyperliquid TWAP API',
+    title: 'Hyperliquid TWAP Explorer',
     description: 'Explore Hyperliquid TWAP data',
 }
 

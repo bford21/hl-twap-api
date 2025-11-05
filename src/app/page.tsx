@@ -284,7 +284,7 @@ export default function Home() {
               value={filters.limit}
               onChange={(e) => setFilters({ ...filters, limit: e.target.value })}
               min="1"
-              max="10000"
+              max="100"
               title="Results per page (large values may take longer)"
               style={{ 
                 width: '100%', 
@@ -685,7 +685,7 @@ export default function Home() {
               <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>side</code> - Filter by side: A (ask) or B (bid)</div>
               <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>start_time</code> - Filter trades after this time (ISO 8601)</div>
               <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>end_time</code> - Filter trades before this time (ISO 8601)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>limit</code> - Number of results (default: 100, no hard limit - batched automatically)</div>
+              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>limit</code> - Number of results per page (default: 100, max: 100)</div>
               <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>offset</code> - Pagination offset (default: 0)</div>
               <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>include_participants</code> - Include participant details (default: true)</div>
             </div>
@@ -951,7 +951,7 @@ export default function Home() {
           <ul style={{ marginBottom: 0, paddingLeft: '1.5rem', lineHeight: '1.8' }}>
             <li>All endpoints return JSON responses</li>
             <li>Timestamps are in ISO 8601 format (UTC)</li>
-            <li>Large requests are automatically batched server-side</li>
+            <li>Maximum 100 records per request</li>
             <li>No authentication required for read operations</li>
             <li>CORS enabled for browser requests</li>
           </ul>

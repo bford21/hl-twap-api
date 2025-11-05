@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const coin = searchParams.get('coin');
     const hours = parseInt(searchParams.get('hours') || '24', 10);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 100); // Max 100
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     // Calculate time threshold
     const timeThreshold = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
@@ -97,15 +99,27 @@ export async function GET(request: NextRequest) {
 
       aggregatedData.sort((a, b) => b.trade_count - a.trade_count);
 
+      // Apply pagination to aggregated results
+      const paginatedData = aggregatedData.slice(offset, offset + limit);
+
       return NextResponse.json({
-        data: aggregatedData,
+        data: paginatedData,
+        count: aggregatedData.length,
+        limit,
+        offset,
         time_range_hours: hours,
         generated_at: new Date().toISOString(),
       });
     }
 
+    // Paginate raw results
+    const paginatedData = data.slice(offset, offset + limit);
+
     return NextResponse.json({
-      data,
+      data: paginatedData,
+      count: data.length,
+      limit,
+      offset,
       time_range_hours: hours,
       generated_at: new Date().toISOString(),
     });
