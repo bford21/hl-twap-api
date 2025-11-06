@@ -110,6 +110,9 @@ Now we need to batch COPY this data into the postgres db. We do this by connecti
 Optional params to specify directory path and upload to staging table (trades_staging & trade_participants_staging)
 `npm run import:all /Volumes/A/hl-data -- --staging-only`
 
+Resume from a specific date (useful if import fails partway through):
+`npm run import:all /Volumes/A/hl-data -- --staging-only --start-date=20251006`
+
 ### 7. Run Development Server
 
 ```bash
@@ -156,6 +159,7 @@ GET /api/health
 **Historical Data Import**
 - `npm run generate:all <data_dir>` - Generate CSVs from historical data (both formats)
 - `npm run import:all <data_dir> -- --staging-only` - Import CSVs to staging tables
+- `npm run import:all <data_dir> -- --staging-only --start-date=YYYYMMDD` - Import from specific date forward
 - `npm run import:all <data_dir> -- --migrate-only` - Migrate staging to production
 
 **Example workflow:**
@@ -166,7 +170,10 @@ npm run generate:all /path/to/hl-data
 # 2. Import to staging for review
 npm run import:all /path/to/hl-data -- --staging-only
 
-# 3. Migrate to production after verification
+# 3. If import fails, resume from specific date
+npm run import:all /path/to/hl-data -- --staging-only --start-date=20251006
+
+# 4. Migrate to production after verification
 npm run import:all /path/to/hl-data -- --migrate-only
 ```
 

@@ -149,11 +149,24 @@ async function main() {
   const stagingOnly = args.includes('--staging-only');
   const migrateOnly = args.includes('--migrate-only');
   
+  // Parse --start-date parameter
+  const startDateArg = args.find(arg => arg.startsWith('--start-date='));
+  const startDate = startDateArg ? startDateArg.split('=')[1] : null;
+  
+  // Validate start date format if provided
+  if (startDate && !/^\d{8}$/.test(startDate)) {
+    console.error(`❌ Error: Invalid start date format "${startDate}". Expected format: YYYYMMDD (e.g., 20251006)`);
+    process.exit(1);
+  }
+  
   console.log('🚀 Unified PostgreSQL CSV Import Script (with Staging Tables)');
   console.log('='.repeat(70));
   console.log(`Base directory: ${baseDir}`);
   console.log(`Mode: ${stagingOnly ? 'STAGING ONLY (will not migrate)' : migrateOnly ? 'MIGRATE ONLY (expects staging loaded)' : 'FULL (staging + migration)'}`);
   console.log(`Skip sequence update: ${skipSequence ? 'Yes' : 'No'}`);
+  if (startDate) {
+    console.log(`Start date filter: ${startDate} (${startDate.substring(0,4)}-${startDate.substring(4,6)}-${startDate.substring(6,8)})`);
+  }
   console.log('='.repeat(70));
 
   if (!fs.existsSync(baseDir)) {
@@ -237,6 +250,24 @@ async function main() {
     
     // Sort all CSV pairs by day name (chronological order)
     csvPairs.sort((a, b) => a.dayName.localeCompare(b.dayName));
+
+    // Filter by start date if provided
+    if (startDate) {
+      const beforeFilter = csvPairs.length;
+      const originalFirstDay = csvPairs[0]?.dayName;
+      const originalLastDay = csvPairs[csvPairs.length - 1]?.dayName;
+      
+      csvPairs = csvPairs.filter(pair => pair.dayName >= startDate);
+      const afterFilter = csvPairs.length;
+      
+      if (afterFilter === 0) {
+        console.error(`\n❌ Error: No CSV files found on or after ${startDate}`);
+        console.log(`   Available date range: ${originalFirstDay} to ${originalLastDay}`);
+        process.exit(1);
+      }
+      
+      console.log(`\n🗓️  Filtered by start date: ${beforeFilter} → ${afterFilter} day(s) (skipped ${beforeFilter - afterFilter})`);
+    }
 
     const firstDay = csvPairs[0].dayName;
     const lastDay = csvPairs[csvPairs.length - 1].dayName;
