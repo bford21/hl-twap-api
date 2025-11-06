@@ -48,6 +48,7 @@ export default function Home() {
   const [coverage, setCoverage] = useState<CoverageInfo | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Fetch coverage info on mount and every 30 seconds
   useEffect(() => {
@@ -126,17 +127,74 @@ export default function Home() {
     setResults(null);
     setError('');
     setCurrentPage(1);
+    setShowAdvanced(false);
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      minHeight: results ? 'auto' : '100%',
+      flex: 1
+    }}>
       <style jsx>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
         }
+        @keyframes fadeIn {
+          from { 
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @media (max-width: 768px) {
+          .header-section {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
+          .header-actions {
+            width: 100% !important;
+            justify-content: space-between !important;
+          }
+          .data-coverage-card {
+            min-width: 150px !important;
+          }
+          h1 {
+            font-size: 1.5rem !important;
+          }
+          h2 {
+            font-size: 1.25rem !important;
+          }
+          table {
+            font-size: 0.8rem !important;
+          }
+          table th, table td {
+            padding: 0.5rem !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .data-coverage-card {
+            width: 100% !important;
+            min-width: unset !important;
+          }
+          .search-buttons {
+            flex-direction: column !important;
+            width: 100% !important;
+          }
+          .search-buttons button {
+            width: 100% !important;
+          }
+        }
       `}</style>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      
+      <div style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '1.5rem' }}>
+        {/* Header */}
+        <div className="header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: results ? '2rem' : '0', flexWrap: 'wrap', gap: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <img 
             src="/hl.png" 
@@ -148,246 +206,329 @@ export default function Home() {
             }} 
           />
           <div>
-            <h1 style={{ marginBottom: '0.5rem' }}>Hyperliquid TWAP Trade Search</h1>
-            <p style={{ color: '#666', marginBottom: 0 }}>Search and filter hyperliquid twap trades</p>
+            <h1 style={{ marginBottom: '0.5rem' }}>Hyperliquid TWAP Explorer</h1>
+            <p style={{ color: '#666', marginBottom: 0 }}>Search historical Hyperliquid TWAP trades</p>
           </div>
         </div>
         
-        {/* Data Coverage Info */}
-        <div style={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-          color: 'white',
-          padding: '1rem 1.5rem', 
-          borderRadius: '8px',
-          minWidth: '280px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '0.75rem', opacity: 0.9, marginBottom: '0.5rem', fontWeight: '600', letterSpacing: '0.5px' }}>
-            DATA COVERAGE
-          </div>
-          {coverageLoading ? (
-            <>
-              <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                <div style={{ background: 'rgba(255,255,255,0.3)', height: '1.2rem', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
-              </div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                <div style={{ background: 'rgba(255,255,255,0.3)', height: '0.9rem', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
-              </div>
-            </>
-          ) : coverage ? (
-            <>
-              {coverage.earliest_trade && coverage.latest_trade ? (
-                <>
-                  <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                    <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
-                    {' → '}
-                    <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                    {coverage.total_trades?.toLocaleString() || 0} trades
-                  </div>
-                </>
-              ) : (
-                <div style={{ fontSize: '0.9rem' }}>
-                  {coverage.total_trades > 0 ? `${coverage.total_trades.toLocaleString()} trades` : 'No data yet'}
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          {/* Data Coverage Card */}
+          <div className="data-coverage-card" style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+            color: 'white',
+            padding: '0.875rem 1.25rem', 
+            borderRadius: '8px',
+            minWidth: '200px',
+            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+          }}>
+            <div style={{ fontSize: '0.7rem', opacity: 0.9, marginBottom: '0.5rem', fontWeight: '600', letterSpacing: '0.5px' }}>
+              DATA COVERAGE
+            </div>
+            {coverageLoading ? (
+              <>
+                <div style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.3)', height: '1rem', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
                 </div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: '0.9rem' }}>Loading...</div>
-          )}
+                <div style={{ fontSize: '0.75rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.3)', height: '0.8rem', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
+                </div>
+              </>
+            ) : coverage ? (
+              <>
+                {coverage.earliest_trade && coverage.latest_trade ? (
+                  <>
+                    <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                      <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
+                      {' → '}
+                      <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.95, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
+                      <strong>{coverage.total_trades?.toLocaleString() || 0}</strong> trades
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: '0.85rem' }}>
+                    {coverage.total_trades > 0 ? `${coverage.total_trades.toLocaleString()} trades` : 'No data yet'}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: '0.85rem' }}>Loading...</div>
+            )}
+          </div>
+
+          <a 
+            href="/docs"
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#667eea',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '6px',
+              fontSize: '0.95rem',
+              fontWeight: '500',
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = '#5568d3';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = '#667eea';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            📚 API Docs
+          </a>
         </div>
       </div>
+      </div>
 
-      {/* Search Form */}
+      {/* Search Form - Centered Vertically and Horizontally */}
       <div style={{ 
-        background: '#f9f9f9', 
-        padding: '2rem', 
-        borderRadius: '8px', 
-        marginBottom: '2rem',
-        border: '1px solid #e0e0e0'
+        flex: results ? 0 : 1,
+        display: 'flex',
+        alignItems: results ? 'flex-start' : 'center',
+        justifyContent: 'center',
+        padding: results ? '0' : '2rem 1.5rem'
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              TWAP ID
-            </label>
-            <input
-              type="text"
-              value={filters.twap_id}
-              onChange={(e) => setFilters({ ...filters, twap_id: e.target.value })}
-              placeholder="568722"
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              Coin
-            </label>
-            <input
-              type="text"
-              value={filters.coin}
-              onChange={(e) => setFilters({ ...filters, coin: e.target.value.toUpperCase() })}
-              placeholder="BTC"
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              Side
-            </label>
-            <select
-              value={filters.side}
-              onChange={(e) => setFilters({ ...filters, side: e.target.value })}
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px',
-                backgroundColor: 'white',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All</option>
-              <option value="A">Ask (A)</option>
-              <option value="B">Bid (B)</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              Limit
-            </label>
-            <input
-              type="number"
-              value={filters.limit}
-              onChange={(e) => setFilters({ ...filters, limit: e.target.value })}
-              min="1"
-              max="100"
-              title="Results per page (large values may take longer)"
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
+        <div style={{ 
+          maxWidth: '700px', 
+          width: '100%',
+          padding: '0 1rem'
+        }}>
+        {/* Main Search Input */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '1rem', 
+            fontSize: '1.2rem', 
+            fontWeight: '600',
+            color: '#333',
+            textAlign: 'center'
+          }}>
+            Search by Wallet Address
+          </label>
+          <input
+            type="text"
+            value={filters.user}
+            onChange={(e) => setFilters({ ...filters, user: e.target.value })}
+            placeholder="Enter wallet address"
+            style={{ 
+              width: '100%', 
+              padding: '1rem 1.25rem',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
+              fontSize: '1.05rem',
+              boxSizing: 'border-box',
+              outline: 'none',
+              transition: 'border-color 0.2s',
+              background: 'white'
+            }}
+            onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
+            onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
+          />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              User Address
-            </label>
-            <input
-              type="text"
-              value={filters.user}
-              onChange={(e) => setFilters({ ...filters, user: e.target.value })}
-              placeholder="0xabc..."
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              Start Time
-            </label>
-            <input
-              type="datetime-local"
-              value={filters.start_time}
-              onChange={(e) => setFilters({ ...filters, start_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
-              End Time
-            </label>
-            <input
-              type="datetime-local"
-              value={filters.end_time}
-              onChange={(e) => setFilters({ ...filters, end_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
-              style={{ 
-                width: '100%', 
-                padding: '0.625rem 0.75rem',
-                border: '1px solid #ddd', 
-                borderRadius: '6px',
-                fontSize: '0.95rem',
-                boxSizing: 'border-box',
-                height: '42px'
-              }}
-            />
-          </div>
+        {/* Advanced Options Toggle */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#667eea',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              padding: '0.5rem 0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <span style={{ 
+              display: 'inline-block',
+              transition: 'transform 0.2s',
+              transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)',
+              fontSize: '0.75rem'
+            }}>
+              ▶
+            </span>
+            Advanced Options
+          </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        {/* Advanced Filters */}
+        {showAdvanced && (
+          <div style={{ 
+            marginBottom: '1.5rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid #e5e5e5'
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  TWAP ID
+                </label>
+                <input
+                  type="text"
+                  value={filters.twap_id}
+                  onChange={(e) => setFilters({ ...filters, twap_id: e.target.value })}
+                  placeholder="568722"
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  Coin
+                </label>
+                <input
+                  type="text"
+                  value={filters.coin}
+                  onChange={(e) => setFilters({ ...filters, coin: e.target.value.toUpperCase() })}
+                  placeholder="BTC"
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  Side
+                </label>
+                <select
+                  value={filters.side}
+                  onChange={(e) => setFilters({ ...filters, side: e.target.value })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">All</option>
+                  <option value="A">Ask (A)</option>
+                  <option value="B">Bid (B)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  Limit
+                </label>
+                <input
+                  type="number"
+                  value={filters.limit}
+                  onChange={(e) => setFilters({ ...filters, limit: e.target.value })}
+                  min="1"
+                  max="100"
+                  title="Results per page (large values may take longer)"
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  Start Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={filters.start_time}
+                  onChange={(e) => setFilters({ ...filters, start_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.625rem', fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                  End Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={filters.end_time}
+                  onChange={(e) => setFilters({ ...filters, end_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #ddd', 
+                    borderRadius: '6px',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    height: '42px'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="search-buttons" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
           <button
             onClick={() => handleSearch(1)}
             disabled={loading}
             style={{
-              padding: '0.75rem 2rem',
-              background: loading ? '#ccc' : '#000',
+              padding: '0.875rem 2.5rem',
+              background: loading ? '#ccc' : '#667eea',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '8px',
               cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '0.95rem',
-              fontWeight: '500',
-              transition: 'all 0.2s',
-              boxShadow: loading ? 'none' : '0 2px 4px rgba(0,0,0,0.1)'
+              fontSize: '1.05rem',
+              fontWeight: '600',
+              boxShadow: loading ? 'none' : '0 4px 12px rgba(102, 126, 234, 0.3)',
+              transition: 'all 0.2s'
             }}
             onMouseOver={(e) => {
               if (!loading) {
-                e.currentTarget.style.background = '#333';
-                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
               }
             }}
             onMouseOut={(e) => {
               if (!loading) {
-                e.currentTarget.style.background = '#000';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
               }
             }}
           >
@@ -396,28 +537,28 @@ export default function Home() {
           <button
             onClick={handleReset}
             style={{
-              padding: '0.75rem 2rem',
+              padding: '0.875rem 2rem',
               background: 'white',
-              color: '#333',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
+              color: '#666',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '0.95rem',
+              fontSize: '1.05rem',
               fontWeight: '500',
-              transition: 'all 0.2s',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+              transition: 'all 0.2s'
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.background = '#f5f5f5';
               e.currentTarget.style.borderColor = '#bbb';
+              e.currentTarget.style.transform = 'translateY(-2px)';
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.background = 'white';
               e.currentTarget.style.borderColor = '#ddd';
+              e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
             Reset
           </button>
+        </div>
         </div>
       </div>
 
@@ -428,8 +569,12 @@ export default function Home() {
           border: '1px solid #fcc', 
           padding: '1rem', 
           borderRadius: '4px', 
-          marginBottom: '1rem',
-          color: '#c00'
+          margin: '0 1.5rem 1rem',
+          color: '#c00',
+          maxWidth: '1200px',
+          width: '100%',
+          boxSizing: 'border-box',
+          alignSelf: 'center'
         }}>
           {error}
         </div>
@@ -437,7 +582,12 @@ export default function Home() {
 
       {/* Results */}
       {results && (
-        <div>
+        <div style={{
+          maxWidth: '1200px',
+          width: '100%',
+          margin: '0 auto',
+          padding: '0 1.5rem 2rem'
+        }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
             <h2 style={{ margin: 0 }}>
               Results <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({results.count} total)</span>
@@ -644,319 +794,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* API Documentation */}
-      <div style={{ marginTop: '4rem', paddingTop: '3rem', borderTop: '2px solid #e0e0e0' }}>
-        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.75rem' }}>📚 API Documentation</h2>
-        <p style={{ color: '#666', marginBottom: '2rem' }}>
-          Access trade data programmatically through our RESTful API endpoints.
-        </p>
-
-        {/* GET /api/trades */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/trades</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            Retrieve trade data with optional filters and pagination.
-          </p>
-          
-          <div style={{ marginBottom: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Query Parameters:</strong>
-            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>twap_id</code> - Filter by TWAP strategy ID</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>coin</code> - Filter by coin symbol (e.g., BTC, ETH)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>user</code> - Filter by user address</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>side</code> - Filter by side: A (ask) or B (bid)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>start_time</code> - Filter trades after this time (ISO 8601)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>end_time</code> - Filter trades before this time (ISO 8601)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>limit</code> - Number of results per page (default: 100, max: 100)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>offset</code> - Pagination offset (default: 0)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>include_participants</code> - Include participant details (default: true)</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/trades?twap_id=568722&limit=50"
-
-# Response
-{
-  "data": [
-    {
-      "id": 123,
-      "coin": "BTC",
-      "side": "A",
-      "time": "2025-03-22T10:30:00.000Z",
-      "px": 83917.0,
-      "sz": 0.5,
-      "hash": "0x123...",
-      "participants": [...]
-    }
-  ],
-  "count": 150,
-  "limit": 50,
-  "offset": 0
-}`}
-            </pre>
-          </div>
-        </div>
-
-        {/* GET /api/twap */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/twap</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            List all unique TWAP strategy IDs in the database.
-          </p>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/twap"
-
-# Response
-{
-  "data": [568722, 568733, 568744, ...],
-  "count": 1234
-}`}
-            </pre>
-          </div>
-        </div>
-
-        {/* GET /api/twap/:id */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/twap/:id</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            Get detailed statistics and information for a specific TWAP strategy.
-          </p>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/twap/568722"
-
-# Response
-{
-  "twap_id": 568722,
-  "total_trades": 45,
-  "total_volume": 125.5,
-  "coins": ["BTC", "ETH"],
-  "users": ["0xabc...", "0xdef..."],
-  "first_trade": "2025-03-22T10:00:00.000Z",
-  "last_trade": "2025-03-22T15:30:00.000Z"
-}`}
-            </pre>
-          </div>
-        </div>
-
-        {/* GET /api/trades/stats */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/trades/stats</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            Get aggregated trade statistics by coin.
-          </p>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Query Parameters:</strong>
-            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>coin</code> - Filter by specific coin (optional)</div>
-              <div><code style={{ background: '#fff', padding: '0.2rem 0.5rem', borderRadius: '3px' }}>hours</code> - Time range in hours (default: 24)</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/trades/stats?hours=24"
-
-# Response
-{
-  "stats": [
-    {
-      "coin": "BTC",
-      "total_trades": 1234,
-      "total_volume": 567.89,
-      "avg_price": 83917.0,
-      "min_price": 83500.0,
-      "max_price": 84200.0
-    }
-  ]
-}`}
-            </pre>
-          </div>
-        </div>
-
-        {/* GET /api/coverage */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/coverage</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            Get information about data coverage and availability.
-          </p>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/coverage"
-
-# Response
-{
-  "earliest_trade": "2025-03-22T00:00:00.000Z",
-  "latest_trade": "2025-05-25T23:59:59.000Z",
-  "total_trades": 1234567,
-  "twap_trades": 45678,
-  "unique_twaps": 2345,
-  "last_updated": "2025-11-04T12:34:56.789Z"
-}`}
-            </pre>
-          </div>
-        </div>
-
-        {/* Rate Limits & Authentication */}
-        <div style={{ 
-          background: '#fff3cd',
-          border: '1px solid #ffc107',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          marginTop: '2rem'
-        }}>
-          <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.1rem' }}>⚡ Rate Limits & Notes</h3>
-          <ul style={{ marginBottom: 0, paddingLeft: '1.5rem', lineHeight: '1.8' }}>
-            <li>All endpoints return JSON responses</li>
-            <li>Timestamps are in ISO 8601 format (UTC)</li>
-            <li>Maximum 100 records per request</li>
-            <li>No authentication required for read operations</li>
-            <li>CORS enabled for browser requests</li>
-          </ul>
-        </div>
-      </div>
     </div>
   );
 }
