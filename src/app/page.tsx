@@ -345,6 +345,17 @@ export default function Home() {
             onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
             onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
           />
+          
+          {/* Trade Count */}
+          <div style={{ 
+            textAlign: 'center',
+            marginTop: '0.75rem',
+            color: '#999', 
+            fontSize: '0.85rem',
+            fontFamily: 'monospace'
+          }}>
+            {(73548026).toLocaleString()} trades indexed
+          </div>
         </div>
 
         {/* Advanced Options Toggle */}
