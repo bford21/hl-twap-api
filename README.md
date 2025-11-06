@@ -134,11 +134,6 @@ GET /api/trades?twap_id=568722&start_time=2025-03-22T10:00:00Z
 GET /api/twap/568722
 ```
 
-### List All TWAPs
-```bash
-GET /api/twap
-```
-
 ### Health Check
 ```bash
 GET /api/health
