@@ -38,7 +38,6 @@ Run the following sql to create the neccesary tables.
 CREATE TABLE trades (
   id BIGSERIAL PRIMARY KEY,
   coin TEXT NOT NULL,
-  side TEXT NOT NULL CHECK (side IN ('A', 'B')),
   time TIMESTAMPTZ NOT NULL,
   px NUMERIC NOT NULL,
   sz NUMERIC NOT NULL,
@@ -47,11 +46,12 @@ CREATE TABLE trades (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Participants table (normalized)
+-- Participants table (2 entries per trade)
 CREATE TABLE trade_participants (
   id BIGSERIAL PRIMARY KEY,
   trade_id BIGINT NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
   user_address TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('A', 'B')),
   start_pos NUMERIC NOT NULL,
   oid BIGINT NOT NULL,
   twap_id BIGINT,
@@ -64,6 +64,8 @@ CREATE INDEX idx_trades_coin ON trades(coin);
 CREATE INDEX idx_trades_time ON trades(time DESC);
 CREATE INDEX idx_participants_twap_id ON trade_participants(twap_id) WHERE twap_id IS NOT NULL;
 CREATE INDEX idx_participants_trade_id ON trade_participants(trade_id);
+CREATE INDEX idx_participants_side ON trade_participants(side);
+CREATE INDEX idx_participants_user_address ON trade_participants(user_address);
 ```
 
 ### 4. Download All Historical Data
@@ -93,6 +95,15 @@ Note: You may see logs like `Failed ./hourly/20250525/._9.lz4` you can safely ig
 The data we downloaded contains ALL Hyperliquid trades. We want to parse the data, pull out trades where atleast one side of the trade is a TWAP trade and write these trades to a csv for efficient insertion into the database later.
 
 The 2 data sets contain different schemas so we have 2 separate scripts to parse them but one script that wraps them both for 1 easy command to parse all the data into a single unified schema.
+
+**Important: Data Format Differences**
+- `node_fills_by_block`: Each participant explicitly includes their `side` field (A/B) ✅
+- `node_trades`: Only includes `side` at trade level. Per [Hyperliquid API docs](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/notation), participants are ordered by role:
+  - `side_info[0]` = buyer (side B)
+  - `side_info[1]` = seller (side A)
+  - The `trade.side` field indicates which side was the aggressor/taker
+  
+This ordering is documented in the official Hyperliquid API specification.
 
 `npm run generate:all`
 

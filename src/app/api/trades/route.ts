@@ -267,21 +267,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { coin, side, time, px, sz, hash, trade_dir_override, participants } = body;
 
-    // Validate required fields
-    if (!coin || !side || !time || px === undefined || sz === undefined || !hash || !participants) {
+    // Validate required fields (side is optional at trade level for backwards compatibility)
+    if (!coin || !time || px === undefined || sz === undefined || !hash || !participants) {
       return NextResponse.json(
         { 
-          error: 'Missing required fields: coin, side, time, px, sz, hash, participants',
+          error: 'Missing required fields: coin, time, px, sz, hash, participants',
           received: Object.keys(body),
         },
-        { status: 400 }
-      );
-    }
-
-    // Validate side value
-    if (side !== 'A' && side !== 'B') {
-      return NextResponse.json(
-        { error: 'side must be either "A" or "B"' },
         { status: 400 }
       );
     }
@@ -294,13 +286,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Insert trade first
+    // Validate that each participant has a side (use trade-level side as fallback for backwards compatibility)
+    for (const p of participants) {
+      if (!p.side && !side) {
+        return NextResponse.json(
+          { error: 'Each participant must have a side field (A or B), or provide side at trade level' },
+          { status: 400 }
+        );
+      }
+      const participantSide = p.side || side;
+      if (participantSide !== 'A' && participantSide !== 'B') {
+        return NextResponse.json(
+          { error: 'participant side must be either "A" or "B"' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Insert trade first (keep side for backwards compatibility with existing tables)
     const { data: tradeData, error: tradeError } = await supabase
       .from('trades')
       .insert([
         {
           coin,
-          side,
+          side: side || participants[0]?.side || 'A', // Use first participant's side as fallback
           time,
           px: typeof px === 'string' ? parseFloat(px) : px,
           sz: typeof sz === 'string' ? parseFloat(sz) : sz,
@@ -318,10 +327,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Insert participants
+    // Insert participants (with side field)
     const participantRecords = participants.map((p: any) => ({
       trade_id: tradeData.id,
       user_address: p.user_address || p.user,
+      side: p.side || side, // Use participant's side or fall back to trade-level side
       start_pos: typeof p.start_pos === 'string' ? parseFloat(p.start_pos) : p.start_pos,
       oid: p.oid,
       twap_id: p.twap_id || null,

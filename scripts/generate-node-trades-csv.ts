@@ -14,6 +14,8 @@ interface SideInfo {
   oid: number;
   twap_id: number | null;
   cloid: string | null;
+  // NOTE: node_trades format does NOT include 'side' in side_info
+  // Per Hyperliquid docs: side_info[0] = buyer (B), side_info[1] = seller (A)
 }
 
 interface TradeRecord {
@@ -101,11 +103,10 @@ async function processFile(
         // Assign sequential trade ID
         const tradeId = nextTradeId++;
         
-        // Write trade to CSV (with explicit ID)
+        // Write trade to CSV (with explicit ID) - NO side column
         const tradeRow = [
           tradeId,
           escapeCsvField(trade.coin),
-          escapeCsvField(trade.side),
           escapeCsvField(trade.time),
           escapeCsvField(trade.px),
           escapeCsvField(trade.sz),
@@ -116,11 +117,29 @@ async function processFile(
         tradesWriter.write(tradeRow + '\n');
         stats.tradesWritten++;
         
-        // Write ALL participants for this trade
-        for (const sideInfo of trade.side_info) {
+        // Write ALL participants for this trade (WITH side column)
+        // NOTE: node_trades format doesn't include side in side_info, but per Hyperliquid docs:
+        // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/notation
+        // - side_info[0] = buyer (side B)
+        // - side_info[1] = seller (side A)
+        // The trade.side indicates which side was the aggressor/taker
+        for (let i = 0; i < trade.side_info.length; i++) {
+          const sideInfo = trade.side_info[i];
+          
+          // Determine side based on position in array (documented by Hyperliquid)
+          let side: string;
+          if (i === 0) {
+            // First participant is always the buyer (side B)
+            side = 'B';
+          } else {
+            // Second participant is always the seller (side A)
+            side = 'A';
+          }
+          
           const participantRow = [
             tradeId, // trade_id (foreign key)
             escapeCsvField(sideInfo.user),
+            escapeCsvField(side), // 'A' = Ask/Sell, 'B' = Bid/Buy
             escapeCsvField(sideInfo.start_pos),
             escapeCsvField(sideInfo.oid),
             escapeCsvField(sideInfo.twap_id),

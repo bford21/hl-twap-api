@@ -133,11 +133,10 @@ async function processFile(
           // Convert Unix timestamp (milliseconds) to ISO 8601
           const timeISO = new Date(firstTrade.time).toISOString();
           
-          // Write trade to CSV (with explicit ID)
+          // Write trade to CSV (with explicit ID) - NO side column
           const tradeRow = [
             tradeId,
             escapeCsvField(firstTrade.coin),
-            escapeCsvField(firstTrade.side),
             escapeCsvField(timeISO),
             escapeCsvField(firstTrade.px),
             escapeCsvField(firstTrade.sz),
@@ -148,11 +147,12 @@ async function processFile(
           tradesWriter.write(tradeRow + '\n');
           stats.tradesWritten++;
           
-          // Write ALL participants for this trade
+          // Write ALL participants for this trade (WITH side column)
           for (const [userAddress, trade] of participants) {
             const participantRow = [
               tradeId, // trade_id (foreign key)
               escapeCsvField(userAddress),
+              escapeCsvField(trade.side), // 'A' = Ask/Sell, 'B' = Bid/Buy
               escapeCsvField(trade.startPosition),
               escapeCsvField(trade.oid),
               escapeCsvField(trade.twapId),

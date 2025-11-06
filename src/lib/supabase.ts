@@ -17,6 +17,7 @@ export interface TradeParticipant {
   id?: number;
   trade_id?: number;
   user_address: string;
+  side: string; // 'A' = Ask/Sell, 'B' = Bid/Buy
   start_pos: number;
   oid: number;
   twap_id: number | null;
@@ -80,6 +81,7 @@ export type Database = {
           id: number;
           trade_id: number;
           user_address: string;
+          side: string;
           start_pos: number;
           oid: number;
           twap_id: number | null;
@@ -90,6 +92,7 @@ export type Database = {
           id?: number;
           trade_id: number;
           user_address: string;
+          side: string;
           start_pos: number;
           oid: number;
           twap_id?: number | null;
@@ -100,6 +103,7 @@ export type Database = {
           id?: number;
           trade_id?: number;
           user_address?: string;
+          side?: string;
           start_pos?: number;
           oid?: number;
           twap_id?: number | null;

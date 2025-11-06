@@ -95,7 +95,7 @@ async function importDay(
     const tradesStart = Date.now();
     
     const tradesStream = client.query(
-      copyFrom(`COPY trades_staging(id, coin, side, time, px, sz, hash, trade_dir_override) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
+      copyFrom(`COPY trades_staging(id, coin, time, px, sz, hash, trade_dir_override) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
     );
     const tradesFileStream = fs.createReadStream(day.tradesPath);
     await pipeline(tradesFileStream, tradesStream);
@@ -108,7 +108,7 @@ async function importDay(
     const participantsStart = Date.now();
     
     const participantsStream = client.query(
-      copyFrom(`COPY trade_participants_staging(trade_id, user_address, start_pos, oid, twap_id, cloid) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
+      copyFrom(`COPY trade_participants_staging(trade_id, user_address, side, start_pos, oid, twap_id, cloid) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
     );
     const participantsFileStream = fs.createReadStream(day.participantsPath);
     await pipeline(participantsFileStream, participantsStream);

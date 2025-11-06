@@ -55,7 +55,6 @@ interface BlockRecord {
 interface TradeWithParticipants {
   trade: {
     coin: string;
-    side: string;
     time: string; // ISO 8601
     px: number;
     sz: number;
@@ -64,6 +63,7 @@ interface TradeWithParticipants {
   };
   participants: Array<{
     user_address: string;
+    side: string; // 'A' = Ask/Sell, 'B' = Bid/Buy
     start_pos: number;
     oid: number;
     twap_id: number | null;
@@ -129,7 +129,6 @@ function parseTrades(content: string): TradeWithParticipants[] {
     trades.push({
       trade: {
         coin: firstTrade.coin,
-        side: firstTrade.side,
         time: new Date(firstTrade.time).toISOString(),
         px: parseFloat(firstTrade.px),
         sz: parseFloat(firstTrade.sz),
@@ -138,6 +137,7 @@ function parseTrades(content: string): TradeWithParticipants[] {
       },
       participants: participants.map(([userAddress, trade]: [string, TradeData]) => ({
         user_address: userAddress,
+        side: trade.side, // Each participant has their own side (A or B)
         start_pos: parseFloat(trade.startPosition),
         oid: trade.oid,
         twap_id: trade.twapId ?? null,
