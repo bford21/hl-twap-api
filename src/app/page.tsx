@@ -325,6 +325,11 @@ export default function Home() {
             type="text"
             value={filters.user}
             onChange={(e) => setFilters({ ...filters, user: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !loading) {
+                handleSearch(1);
+              }
+            }}
             placeholder="Enter wallet address"
             style={{ 
               width: '100%', 
@@ -599,6 +604,24 @@ export default function Home() {
           margin: '0 auto',
           padding: '0 1.5rem 2rem'
         }}>
+          {/* Warning Box */}
+          <div style={{
+            background: '#fff3cd',
+            border: '2px solid #ffc107',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            marginTop: '2rem',
+            marginBottom: '2rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.75rem'
+          }}>
+            <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+            <span style={{ color: '#856404', fontWeight: '500', fontSize: '0.95rem' }}>
+              Data may be incomplete — please treat this tool as experimental
+            </span>
+          </div>
+
           <div style={{ marginBottom: '2rem' }}>
             <h2 style={{ margin: 0, marginBottom: '1rem' }}>Wallet Stats</h2>
             <div style={{ overflowX: 'auto' }}>
@@ -730,6 +753,24 @@ export default function Home() {
             >
               ← Back to TWAP Orders
             </button>
+          </div>
+
+          {/* Warning Box */}
+          <div style={{
+            background: '#fff3cd',
+            border: '2px solid #ffc107',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            marginTop: '2rem',
+            marginBottom: '2rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.75rem'
+          }}>
+            <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+            <span style={{ color: '#856404', fontWeight: '500', fontSize: '0.95rem' }}>
+              Data may be incomplete — please treat this tool as experimental
+            </span>
           </div>
         </div>
       )}
