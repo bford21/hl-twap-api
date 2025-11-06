@@ -353,57 +353,6 @@ export default function ApiDocs() {
           </div>
         </div>
 
-        {/* GET /api/coverage */}
-        <div style={{ 
-          marginBottom: '2.5rem',
-          background: '#fafafa',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e5e5e5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: '#10b981', 
-              color: 'white', 
-              padding: '0.25rem 0.75rem', 
-              borderRadius: '4px',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}>
-              GET
-            </span>
-            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/coverage</code>
-          </div>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            Get information about data coverage and availability.
-          </p>
-
-          <div style={{ marginTop: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
-            <pre style={{ 
-              background: '#1e293b', 
-              color: '#e2e8f0', 
-              padding: '1rem', 
-              borderRadius: '6px',
-              overflow: 'auto',
-              fontSize: '0.85rem',
-              lineHeight: '1.5'
-            }}>
-{`curl "https://twaptracker.xyz/api/coverage"
-
-# Response
-{
-  "earliest_trade": "2025-03-22T00:00:00.000Z",
-  "latest_trade": "2025-05-25T23:59:59.000Z",
-  "total_trades": 1234567,
-  "twap_trades": 45678,
-  "unique_twaps": 2345,
-  "last_updated": "2025-11-04T12:34:56.789Z"
-}`}
-            </pre>
-          </div>
-        </div>
-
         {/* Rate Limits & Authentication */}
         <div style={{ 
           background: '#fff3cd',

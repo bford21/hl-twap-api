@@ -13,7 +13,8 @@
     "lint": "next lint",
     "cron": "tsx src/jobs/sync-data.ts",
     "generate:all": "tsx scripts/generate-all-csv.ts",
-    "import:all": "tsx scripts/import-all-csv.ts"
+    "import:all": "tsx scripts/import-all-csv.ts",
+    "update:leaderboard": "tsx scripts/update-leaderboard.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.665.0",

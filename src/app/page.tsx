@@ -482,7 +482,7 @@ export default function Home() {
                 </label>
                 <input
                   type="datetime-local"
-                  value={filters.start_time}
+                  value={filters.start_time ? filters.start_time.slice(0, 16) : ''}
                   onChange={(e) => setFilters({ ...filters, start_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
                   style={{ 
                     width: '100%', 
@@ -502,7 +502,7 @@ export default function Home() {
                 </label>
                 <input
                   type="datetime-local"
-                  value={filters.end_time}
+                  value={filters.end_time ? filters.end_time.slice(0, 16) : ''}
                   onChange={(e) => setFilters({ ...filters, end_time: e.target.value ? new Date(e.target.value).toISOString() : '' })}
                   style={{ 
                     width: '100%', 

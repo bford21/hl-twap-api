@@ -92,18 +92,18 @@ Note: You may see logs like `Failed ./hourly/20250525/._9.lz4` you can safely ig
 
 The data we downloaded contains ALL Hyperliquid trades. We want to parse the data, pull out trades where atleast one side of the trade is a TWAP trade and write these trades to a csv for efficient insertion into the database later.
 
-The 2 data sets contain different schemas so we have 2 separate scripts to parse them but one script that wraps them both for 1 easy command to parse all the data
+The 2 data sets contain different schemas so we have 2 separate scripts to parse them but one script that wraps them both for 1 easy command to parse all the data into a single unified schema.
 
 `npm run generate:all`
 
 Optional params to specificy filepath
 `npm run generate:all /Volumes/A/hl-data`
 
-The output of this parsing is 2 CSV files per day each correspending to a database table (trades_<date> & trade_participants_<date>). These files are located in the same dir that the data lives in.
+The output of this parsing is 2 CSV files per day each correspending to a database table. These files are located in the same dir that the data lives in.
 
 ### 6. COPY CSV Data to Postgres
 
-Now we need to batch COPY this data into the postgres db. We do this by connecting directly to the postgres instance.
+Now we need to batch COPY this data into the postgres db. We do this by connecting directly to the postgres instance. Once fully inserted the data takes up approx 60gb.
 
 `npm run import:all`
 
@@ -130,7 +130,6 @@ Full API documentation available at https://twaptracker.xyz/docs
 - `GET /api/twap/:id` - Get all trades and statistics for a specific TWAP ID
 - `GET /api/trades/summary` - Get TWAP order summary for a wallet address with aggregate stats
 - `GET /api/trades/stats` - Aggregated trade statistics by coin over time
-- `GET /api/coverage` - Database coverage information (earliest/latest trades, totals)
 - `GET /api/health` - Health check endpoint
 
 **Examples:**
