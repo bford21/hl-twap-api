@@ -22,13 +22,24 @@ interface SearchResults {
   count: number;
 }
 
-interface CoverageInfo {
-  earliest_trade: string | null;
-  latest_trade: string | null;
-  total_trades: number;
-  twap_trades: number;
-  unique_twaps: number;
-  last_updated: string;
+interface TwapSummary {
+  twap_id: number;
+  address: string;
+  coin: string;
+  side: string;
+  trade_count: number;
+  total_volume: number;
+  avg_price: number;
+}
+
+interface TwapSummaryResults {
+  data: TwapSummary[];
+  count: number;
+  stats: {
+    unique_twaps: number;
+    total_trades: number;
+    total_volume: number;
+  };
 }
 
 export default function Home() {
@@ -43,58 +54,83 @@ export default function Home() {
   });
 
   const [results, setResults] = useState<SearchResults | null>(null);
+  const [twapSummaries, setTwapSummaries] = useState<TwapSummaryResults | null>(null);
+  const [selectedTwapId, setSelectedTwapId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [coverage, setCoverage] = useState<CoverageInfo | null>(null);
-  const [coverageLoading, setCoverageLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [twapDetailPage, setTwapDetailPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Fetch coverage info on mount and every 30 seconds
-  useEffect(() => {
-    const fetchCoverage = async () => {
-      try {
-        const response = await fetch('/api/coverage');
-        const data = await response.json();
-        if (response.ok && data) {
-          console.log('Coverage data:', data);
-          setCoverage(data);
-        } else {
-          console.error('Coverage API error:', data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch coverage:', err);
-      } finally {
-        setCoverageLoading(false);
-      }
-    };
-
-    fetchCoverage();
-    const interval = setInterval(fetchCoverage, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
 
   const handleSearch = async (page: number = 1) => {
     setLoading(true);
     setError('');
 
     try {
-      const params = new URLSearchParams();
+      // Check if this is a wallet address search (user field filled, but no TWAP ID)
+      const isWalletSearch = filters.user && !filters.twap_id && !showAdvanced;
       
-      // Calculate offset based on page and limit
-      const limit = parseInt(filters.limit);
-      const offset = (page - 1) * limit;
-      
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) {
-          params.append(key, value);
-        }
-      });
-      
-      // Add offset for pagination
-      params.set('offset', offset.toString());
+      if (isWalletSearch) {
+        // Fetch TWAP summaries for this wallet
+        const response = await fetch(`/api/trades/summary?user=${encodeURIComponent(filters.user)}`);
+        const data = await response.json();
 
-      const response = await fetch(`/api/trades?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch TWAP summaries');
+        }
+
+        setTwapSummaries(data);
+        setResults(null);
+        setSelectedTwapId(null);
+      } else {
+        // Regular trade search
+        const params = new URLSearchParams();
+        
+        // Calculate offset based on page and limit
+        const limit = parseInt(filters.limit);
+        const offset = (page - 1) * limit;
+        
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) {
+            params.append(key, value);
+          }
+        });
+        
+        // Add offset for pagination
+        params.set('offset', offset.toString());
+
+        const response = await fetch(`/api/trades?${params.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch trades');
+        }
+
+        setResults(data);
+        setTwapSummaries(null);
+        setCurrentPage(page);
+      }
+      
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setResults(null);
+      setTwapSummaries(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTwapClick = async (twapId: number, page: number = 1) => {
+    setLoading(true);
+    setError('');
+    setSelectedTwapId(twapId);
+
+    try {
+      const limit = 50;
+      const offset = (page - 1) * limit;
+      const response = await fetch(`/api/trades?twap_id=${twapId}&limit=${limit}&offset=${offset}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -102,9 +138,7 @@ export default function Home() {
       }
 
       setResults(data);
-      setCurrentPage(page);
-      
-      // Scroll to top of results
+      setTwapDetailPage(page);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -112,6 +146,12 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBackToSummary = () => {
+    setSelectedTwapId(null);
+    setResults(null);
+    setTwapDetailPage(1);
   };
 
   const handleReset = () => {
@@ -125,8 +165,11 @@ export default function Home() {
       limit: '50',
     });
     setResults(null);
+    setTwapSummaries(null);
+    setSelectedTwapId(null);
     setError('');
     setCurrentPage(1);
+    setTwapDetailPage(1);
     setShowAdvanced(false);
   };
 
@@ -134,7 +177,7 @@ export default function Home() {
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column',
-      minHeight: results ? 'auto' : '100%',
+      minHeight: (results || twapSummaries) ? 'auto' : '100%',
       flex: 1
     }}>
       <style jsx>{`
@@ -152,17 +195,17 @@ export default function Home() {
             transform: translateY(0);
           }
         }
+        .clickable-row {
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+        .clickable-row:hover {
+          background-color: #f5f5f5 !important;
+        }
         @media (max-width: 768px) {
           .header-section {
             flex-direction: column !important;
             align-items: flex-start !important;
-          }
-          .header-actions {
-            width: 100% !important;
-            justify-content: space-between !important;
-          }
-          .data-coverage-card {
-            min-width: 150px !important;
           }
           h1 {
             font-size: 1.5rem !important;
@@ -178,10 +221,6 @@ export default function Home() {
           }
         }
         @media (max-width: 480px) {
-          .data-coverage-card {
-            width: 100% !important;
-            min-width: unset !important;
-          }
           .search-buttons {
             flex-direction: column !important;
             width: 100% !important;
@@ -194,17 +233,34 @@ export default function Home() {
       
       <div style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '1.5rem' }}>
         {/* Header */}
-        <div className="header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: results ? '2rem' : '0', flexWrap: 'wrap', gap: '1.5rem' }}>
+        <div className="header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (results || twapSummaries) ? '2rem' : '0', flexWrap: 'wrap', gap: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <img 
-            src="/hl.png" 
-            alt="Hyperliquid Logo" 
+          <a 
+            href="/" 
             style={{ 
-              width: '50px', 
-              height: '50px',
-              objectFit: 'contain'
-            }} 
-          />
+              display: 'flex', 
+              cursor: 'pointer',
+              borderRadius: '8px',
+              padding: '4px',
+              transition: 'box-shadow 0.3s ease'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 20px rgba(102, 126, 234, 0.6)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <img 
+              src="/hl.png" 
+              alt="Hyperliquid Logo" 
+              style={{ 
+                width: '50px', 
+                height: '50px',
+                objectFit: 'contain'
+              }} 
+            />
+          </a>
           <div>
             <h1 style={{ marginBottom: '0.5rem' }}>Hyperliquid TWAP Explorer</h1>
             <p style={{ color: '#666', marginBottom: 0 }}>Search historical Hyperliquid TWAP trades</p>
@@ -212,51 +268,6 @@ export default function Home() {
         </div>
         
         <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          {/* Data Coverage Card */}
-          <div className="data-coverage-card" style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            color: 'white',
-            padding: '0.875rem 1.25rem', 
-            borderRadius: '8px',
-            minWidth: '200px',
-            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-          }}>
-            <div style={{ fontSize: '0.7rem', opacity: 0.9, marginBottom: '0.5rem', fontWeight: '600', letterSpacing: '0.5px' }}>
-              DATA COVERAGE
-            </div>
-            {coverageLoading ? (
-              <>
-                <div style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.3)', height: '1rem', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
-                </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.9, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.3)', height: '0.8rem', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s ease-in-out infinite' }}></div>
-                </div>
-              </>
-            ) : coverage ? (
-              <>
-                {coverage.earliest_trade && coverage.latest_trade ? (
-                  <>
-                    <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                      <strong>{new Date(coverage.earliest_trade).toLocaleDateString()}</strong>
-                      {' → '}
-                      <strong>{new Date(coverage.latest_trade).toLocaleDateString()}</strong>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.95, marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '0.5rem' }}>
-                      <strong>{coverage.total_trades?.toLocaleString() || 0}</strong> trades
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: '0.85rem' }}>
-                    {coverage.total_trades > 0 ? `${coverage.total_trades.toLocaleString()} trades` : 'No data yet'}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div style={{ fontSize: '0.85rem' }}>Loading...</div>
-            )}
-          </div>
-
           <a 
             href="/docs"
             style={{
@@ -287,11 +298,11 @@ export default function Home() {
 
       {/* Search Form - Centered Vertically and Horizontally */}
       <div style={{ 
-        flex: results ? 0 : 1,
+        flex: (results || twapSummaries) ? 0 : 1,
         display: 'flex',
-        alignItems: results ? 'flex-start' : 'center',
+        alignItems: (results || twapSummaries) ? 'flex-start' : 'center',
         justifyContent: 'center',
-        padding: results ? '0' : '2rem 1.5rem'
+        padding: (results || twapSummaries) ? '0' : '2rem 1.5rem'
       }}>
         <div style={{ 
           maxWidth: '700px', 
@@ -580,7 +591,149 @@ export default function Home() {
         </div>
       )}
 
+      {/* Wallet Stats Table */}
+      {twapSummaries && !selectedTwapId && (
+        <div style={{
+          maxWidth: '1200px',
+          width: '100%',
+          margin: '0 auto',
+          padding: '0 1.5rem 2rem'
+        }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{ margin: 0, marginBottom: '1rem' }}>Wallet Stats</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Unique TWAPs</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Total Trades</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Total Volume</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontSize: '1rem', fontWeight: '600' }}>
+                      {twapSummaries.stats.unique_twaps.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace', fontSize: '1rem' }}>
+                      {twapSummaries.stats.total_trades.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace', fontSize: '1rem', fontWeight: '600' }}>
+                      ${twapSummaries.stats.total_volume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0 }}>
+              TWAP Orders <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({twapSummaries.count} total)</span>
+            </h2>
+            <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>Click on a row to view detailed trades</p>
+          </div>
+
+          {twapSummaries.data.length === 0 ? (
+            <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>No TWAP orders found for this wallet</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>TWAP ID</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Address</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Side</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Coin</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Trades</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Total Volume</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Avg Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {twapSummaries.data.map((summary) => (
+                    <tr 
+                      key={summary.twap_id} 
+                      className="clickable-row"
+                      onClick={() => handleTwapClick(summary.twap_id)}
+                      style={{ borderBottom: '1px solid #eee' }}
+                    >
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: '600' }}>
+                        {summary.twap_id}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>
+                        <span 
+                          style={{ 
+                            fontSize: '0.85rem',
+                            background: '#f5f5f5',
+                            padding: '0.2rem 0.4rem',
+                            borderRadius: '3px',
+                            color: '#555',
+                            fontFamily: 'monospace',
+                          }}
+                          title={summary.address}
+                        >
+                          {summary.address.slice(0, 6)}...{summary.address.slice(-4)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>{summary.side}</td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: '600' }}>{summary.coin}</td>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                        {summary.trade_count}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace', fontWeight: '600' }}>
+                        ${summary.total_volume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                        ${summary.avg_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Results */}
+      {results && selectedTwapId && (
+        <div style={{
+          maxWidth: '1200px',
+          width: '100%',
+          margin: '0 auto',
+          padding: '0 1.5rem 2rem'
+        }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <button
+              onClick={handleBackToSummary}
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'white',
+                color: '#667eea',
+                border: '2px solid #667eea',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                marginBottom: '1rem',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#667eea';
+                e.currentTarget.style.color = 'white';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.color = '#667eea';
+              }}
+            >
+              ← Back to TWAP Orders
+            </button>
+          </div>
+        </div>
+      )}
+
       {results && (
         <div style={{
           maxWidth: '1200px',
@@ -590,11 +743,17 @@ export default function Home() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
             <h2 style={{ margin: 0 }}>
-              Results <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({results.count} total)</span>
+              {selectedTwapId ? `TWAP ${selectedTwapId} Trades` : 'Results'} <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({results.count.toLocaleString()} total)</span>
             </h2>
             {results.data.length > 0 && (
               <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                Showing {((currentPage - 1) * parseInt(filters.limit)) + 1} - {Math.min(currentPage * parseInt(filters.limit), results.count)} of {results.count}
+                {selectedTwapId ? (
+                  // When viewing specific TWAP, show paginated results
+                  `Showing ${((twapDetailPage - 1) * 50) + 1} - ${Math.min(twapDetailPage * 50, results.count)} of ${results.count.toLocaleString()}`
+                ) : (
+                  // Regular paginated results
+                  `Showing ${((currentPage - 1) * parseInt(filters.limit)) + 1} - ${Math.min(currentPage * parseInt(filters.limit), results.count)} of ${results.count}`
+                )}
               </div>
             )}
           </div>
@@ -602,7 +761,8 @@ export default function Home() {
           {results.data.length === 0 ? (
             <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>No trades found matching your criteria</p>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <>
+              <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                 <thead>
                   <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
@@ -612,8 +772,8 @@ export default function Home() {
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Price</th>
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Size</th>
                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Value</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>User Addresses</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center' }}>TWAP IDs</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>User Addresses</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>TWAP IDs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -632,7 +792,7 @@ export default function Home() {
                           fontSize: '0.85rem',
                           fontWeight: '500'
                         }}>
-                          {trade.side}
+                          {trade.side === 'A' ? 'Sell' : 'Buy'}
                         </span>
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
@@ -644,11 +804,11 @@ export default function Home() {
                       <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
                         ${(trade.px * trade.sz).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'left' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>
                         {trade.participants && trade.participants.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
                             {Array.from(new Set(trade.participants.map(p => p.user_address))).map((address) => (
-                              <code 
+                              <span 
                                 key={address} 
                                 style={{ 
                                   fontSize: '0.75rem',
@@ -656,35 +816,22 @@ export default function Home() {
                                   padding: '0.2rem 0.4rem',
                                   borderRadius: '3px',
                                   color: '#555',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  maxWidth: '180px',
-                                  display: 'block'
+                                  fontFamily: 'monospace',
+                                  width: 'fit-content'
                                 }}
                                 title={address}
                               >
                                 {address.slice(0, 6)}...{address.slice(-4)}
-                              </code>
+                              </span>
                             ))}
                           </div>
                         ) : '-'}
                       </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'left', fontFamily: 'monospace' }}>
                         {trade.participants && trade.participants.length > 0 ? (
-                          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             {Array.from(new Set(trade.participants.map(p => p.twap_id).filter(id => id !== null))).map((twapId) => (
-                              <span 
-                                key={twapId} 
-                                style={{ 
-                                  padding: '0.15rem 0.4rem', 
-                                  background: '#e8f4f8', 
-                                  border: '1px solid #b8d4e8',
-                                  borderRadius: '3px',
-                                  fontSize: '0.8rem',
-                                  fontFamily: 'monospace'
-                                }}
-                              >
+                              <span key={twapId}>
                                 {twapId}
                               </span>
                             ))}
@@ -695,102 +842,111 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
 
           {/* Pagination Controls */}
-          {results.data.length > 0 && (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              marginTop: '2rem',
-              padding: '1rem',
-              background: '#f9f9f9',
-              borderRadius: '8px',
-              flexWrap: 'wrap',
-              gap: '1rem'
-            }}>
-              <button
-                onClick={() => handleSearch(currentPage - 1)}
-                disabled={currentPage === 1 || loading}
-                style={{
-                  padding: '0.5rem 1.5rem',
-                  background: currentPage === 1 || loading ? '#e5e5e5' : '#000',
-                  color: currentPage === 1 || loading ? '#999' : 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: currentPage === 1 || loading ? 'not-allowed' : 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: '500'
-                }}
-              >
-                ← Previous
-              </button>
+          {results.data.length > 0 && (() => {
+            const page = selectedTwapId ? twapDetailPage : currentPage;
+            const limit = selectedTwapId ? 50 : parseInt(filters.limit);
+            const totalPages = Math.ceil(results.count / limit);
+            const handlePageChange = selectedTwapId 
+              ? (p: number) => handleTwapClick(selectedTwapId, p)
+              : (p: number) => handleSearch(p);
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <span style={{ color: '#666', fontSize: '0.9rem' }}>
-                  Page {currentPage} of {Math.ceil(results.count / parseInt(filters.limit))}
-                </span>
-                {Math.ceil(results.count / parseInt(filters.limit)) > 1 && (
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    {Array.from({ length: Math.min(5, Math.ceil(results.count / parseInt(filters.limit))) }, (_, i) => {
-                      const totalPages = Math.ceil(results.count / parseInt(filters.limit));
-                      let pageNum;
-                      
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
+            return (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginTop: '2rem',
+                padding: '1rem',
+                background: '#f9f9f9',
+                borderRadius: '8px',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <button
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1 || loading}
+                  style={{
+                    padding: '0.5rem 1.5rem',
+                    background: page === 1 || loading ? '#e5e5e5' : '#000',
+                    color: page === 1 || loading ? '#999' : 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page === 1 || loading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  ← Previous
+                </button>
 
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => handleSearch(pageNum)}
-                          disabled={loading}
-                          style={{
-                            padding: '0.5rem 0.75rem',
-                            background: currentPage === pageNum ? '#667eea' : 'white',
-                            color: currentPage === pageNum ? 'white' : '#333',
-                            border: currentPage === pageNum ? 'none' : '1px solid #ddd',
-                            borderRadius: '4px',
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: currentPage === pageNum ? '600' : '400',
-                            minWidth: '2rem'
-                          }}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                    Page {page} of {totalPages}
+                  </span>
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (page <= 3) {
+                          pageNum = i + 1;
+                        } else if (page >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = page - 2 + i;
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            disabled={loading}
+                            style={{
+                              padding: '0.5rem 0.75rem',
+                              background: page === pageNum ? '#667eea' : 'white',
+                              color: page === pageNum ? 'white' : '#333',
+                              border: page === pageNum ? 'none' : '1px solid #ddd',
+                              borderRadius: '4px',
+                              cursor: loading ? 'not-allowed' : 'pointer',
+                              fontSize: '0.85rem',
+                              fontWeight: page === pageNum ? '600' : '400',
+                              minWidth: '2rem'
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= totalPages || loading}
+                  style={{
+                    padding: '0.5rem 1.5rem',
+                    background: page >= totalPages || loading ? '#e5e5e5' : '#000',
+                    color: page >= totalPages || loading ? '#999' : 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: page >= totalPages || loading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  Next →
+                </button>
               </div>
-
-              <button
-                onClick={() => handleSearch(currentPage + 1)}
-                disabled={currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading}
-                style={{
-                  padding: '0.5rem 1.5rem',
-                  background: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? '#e5e5e5' : '#000',
-                  color: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? '#999' : 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: currentPage >= Math.ceil(results.count / parseInt(filters.limit)) || loading ? 'not-allowed' : 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: '500'
-                }}
-              >
-                Next →
-              </button>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

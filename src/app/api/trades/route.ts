@@ -20,29 +20,29 @@ export async function GET(request: NextRequest) {
 
     // If filtering by user or twap_id, we need to start with participants
     if (user || twapId) {
-      // Step 1: Find matching participants
-      let participantQuery = supabase
+      // Step 1: Get count of matching participants first (for accurate totals)
+      let countQuery = supabase
         .from('trade_participants')
-        .select('trade_id, *');
+        .select('trade_id', { count: 'exact', head: true });
 
       if (user) {
-        participantQuery = participantQuery.eq('user_address', user.toLowerCase());
+        countQuery = countQuery.eq('user_address', user.toLowerCase());
       }
 
       if (twapId) {
-        participantQuery = participantQuery.eq('twap_id', parseInt(twapId));
+        countQuery = countQuery.eq('twap_id', parseInt(twapId));
       }
 
-      const { data: participants, error: partError } = await participantQuery;
+      const { count: totalParticipants, error: countError } = await countQuery;
 
-      if (partError) {
+      if (countError) {
         return NextResponse.json(
-          { error: partError.message },
+          { error: countError.message },
           { status: 500 }
         );
       }
 
-      if (!participants || participants.length === 0) {
+      if (!totalParticipants || totalParticipants === 0) {
         return NextResponse.json({
           data: [],
           count: 0,
@@ -51,39 +51,90 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Step 2: Get unique trade IDs
+      // Step 2: Fetch ALL participants in batches to get complete trade IDs
+      const participants = [];
+      const batchSize = 1000;
+      let batchOffset = 0;
+
+      while (batchOffset < totalParticipants) {
+        let participantQuery = supabase
+          .from('trade_participants')
+          .select('trade_id, *')
+          .range(batchOffset, batchOffset + batchSize - 1);
+
+        if (user) {
+          participantQuery = participantQuery.eq('user_address', user.toLowerCase());
+        }
+
+        if (twapId) {
+          participantQuery = participantQuery.eq('twap_id', parseInt(twapId));
+        }
+
+        const { data: batch, error: partError } = await participantQuery;
+
+        if (partError) {
+          return NextResponse.json(
+            { error: partError.message },
+            { status: 500 }
+          );
+        }
+
+        if (batch && batch.length > 0) {
+          participants.push(...batch);
+        }
+
+        batchOffset += batchSize;
+
+        // Break if we got fewer results than expected
+        if (!batch || batch.length < batchSize) {
+          break;
+        }
+      }
+
+      // Step 3: Get unique trade IDs
       const tradeIds = Array.from(new Set(participants.map(p => p.trade_id)));
 
-      // Step 3: Fetch the actual trades with filters
-      let tradeQuery = supabase
-        .from('trades')
-        .select('*')
-        .in('id', tradeIds)
-        .order('time', { ascending: false });
+      // Step 4: Fetch the actual trades with filters (in batches if more than 1000)
+      const allTrades = [];
+      const tradeBatchSize = 1000;
+      
+      for (let i = 0; i < tradeIds.length; i += tradeBatchSize) {
+        const batchIds = tradeIds.slice(i, i + tradeBatchSize);
+        
+        let tradeQuery = supabase
+          .from('trades')
+          .select('*')
+          .in('id', batchIds)
+          .order('time', { ascending: false });
 
-      if (coin) {
-        tradeQuery = tradeQuery.eq('coin', coin.toUpperCase());
-      }
+        if (coin) {
+          tradeQuery = tradeQuery.eq('coin', coin.toUpperCase());
+        }
 
-      if (side && (side === 'A' || side === 'B')) {
-        tradeQuery = tradeQuery.eq('side', side);
-      }
+        if (side && (side === 'A' || side === 'B')) {
+          tradeQuery = tradeQuery.eq('side', side);
+        }
 
-      if (startTime) {
-        tradeQuery = tradeQuery.gte('time', startTime);
-      }
+        if (startTime) {
+          tradeQuery = tradeQuery.gte('time', startTime);
+        }
 
-      if (endTime) {
-        tradeQuery = tradeQuery.lte('time', endTime);
-      }
+        if (endTime) {
+          tradeQuery = tradeQuery.lte('time', endTime);
+        }
 
-      const { data: allTrades, error: tradeError } = await tradeQuery;
+        const { data: tradeBatch, error: tradeError } = await tradeQuery;
 
-      if (tradeError) {
-        return NextResponse.json(
-          { error: tradeError.message },
-          { status: 500 }
-        );
+        if (tradeError) {
+          return NextResponse.json(
+            { error: tradeError.message },
+            { status: 500 }
+          );
+        }
+
+        if (tradeBatch && tradeBatch.length > 0) {
+          allTrades.push(...tradeBatch);
+        }
       }
 
       if (!allTrades || allTrades.length === 0) {
@@ -94,6 +145,9 @@ export async function GET(request: NextRequest) {
           offset,
         });
       }
+
+      // Sort all trades by time descending (since batches might not be in order)
+      allTrades.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
       // Apply pagination manually after filtering
       const paginatedTrades = allTrades.slice(offset, offset + requestedLimit);

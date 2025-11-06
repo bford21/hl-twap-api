@@ -123,23 +123,26 @@ Visit http://localhost:3000
 
 ## API Endpoints
 
-### Get Trades
-```bash
-GET /api/trades?twap_id=568722
-GET /api/trades?coin=BTC&limit=100
-GET /api/trades?user=0xabc...
-GET /api/trades?start_time=2025-03-22T00:00:00Z&end_time=2025-03-22T23:59:59Z
-GET /api/trades?twap_id=568722&start_time=2025-03-22T10:00:00Z
-```
+Full API documentation available at https://twaptracker.xyz/docs
 
-### Get TWAP Details
+**Core Endpoints:**
+- `GET /api/trades` - Search trades with filters (twap_id, coin, user, side, time range). Supports pagination.
+- `GET /api/twap/:id` - Get all trades and statistics for a specific TWAP ID
+- `GET /api/trades/summary` - Get TWAP order summary for a wallet address with aggregate stats
+- `GET /api/trades/stats` - Aggregated trade statistics by coin over time
+- `GET /api/coverage` - Database coverage information (earliest/latest trades, totals)
+- `GET /api/health` - Health check endpoint
+
+**Examples:**
 ```bash
+# Get trades for a specific TWAP
+GET /api/trades?twap_id=568722&limit=50&offset=0
+
+# Get wallet TWAP summary
+GET /api/trades/summary?user=0xabc...
+
+# Get TWAP details with statistics
 GET /api/twap/568722
-```
-
-### Health Check
-```bash
-GET /api/health
 ```
 
 ## Scripts
