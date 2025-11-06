@@ -37,3 +37,9 @@ next-env.d.ts
 
 # test data files
 test_files/
+
+# CSV generation tracking
+.last_trade_id
+
+# Sync data preview files
+sync-data-preview-*.json

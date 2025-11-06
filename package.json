@@ -8,18 +8,25 @@
     "start": "next start",
     "lint": "next lint",
     "cron": "tsx src/jobs/sync-data.ts",
-    "import:twap": "tsx scripts/import-twap-trades.ts"
+    "generate:all": "tsx scripts/generate-all-csv.ts",
+    "import:all": "tsx scripts/import-all-csv.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
     "@aws-sdk/client-s3": "^3.665.0",
+    "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5",
+    "lz4": "^0.6.5",
     "next": "14.2.15",
+    "pg": "^8.13.1",
+    "pg-copy-streams": "^6.0.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/lz4": "^0.6.4",
     "@types/node": "^20",
+    "@types/pg": "^8.11.10",
+    "@types/pg-copy-streams": "^1.2.5",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
@@ -28,4 +35,3 @@
     "typescript": "^5"
   }
 }
-
