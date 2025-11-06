@@ -1,10 +1,14 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import Footer from '@/components/Footer'
 
 export const metadata: Metadata = {
     title: 'Hyperliquid TWAP Explorer',
     description: 'Explore Hyperliquid TWAP data',
-    viewport: 'width=device-width, initial-scale=1',
+}
+
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
 }
 
 export default function RootLayout({
@@ -14,9 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
+      <head />
       <body style={{ 
         margin: 0, 
         padding: 0, 
