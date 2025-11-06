@@ -27,7 +27,7 @@ AWS_ACCESS_KEY_ID=your-aws-access-key-id
 AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
 ```
 
-**Note:** AWS credentials are required because the `hl-mainnet-node-data` bucket is a requester-pays bucket. This is used by the daily sync cron job (`npm run cron`) to download new data automatically.
+**Note:** AWS credentials are required because the `hl-mainnet-node-data` bucket is a requester-pays bucket.
 
 ### 3. Create Database Tables
 
@@ -78,6 +78,7 @@ Prerequisites:
 1) Install the AWS CLI (`apt-get install -y awscli`)
 2) Run `aws configure` and enter in your personal AWS AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY (these can be in the Security Credentials section of the AWS Console)
 3) Install lz4 (`apt-get install -y lz4`)
+
 You need to do this because while these s3 buckets are public. They are setup so the requester must pay for network bandwidth.
 
 Start the download by running
@@ -89,7 +90,7 @@ Note: You may see logs like `Failed ./hourly/20250525/._9.lz4` you can safely ig
 
 ### 5. Clean & Prep Data
 
-The data we downloaded contains ALL Hyperliquid trades. We want to parse the data, pull out only TWAP trades and write these trades to a csv for efficient insertion into the database later.
+The data we downloaded contains ALL Hyperliquid trades. We want to parse the data, pull out trades where atleast one side of the trade is a TWAP trade and write these trades to a csv for efficient insertion into the database later.
 
 The 2 data sets contain different schemas so we have 2 separate scripts to parse them but one script that wraps them both for 1 easy command to parse all the data
 
