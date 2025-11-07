@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
       // Step 2: Fetch ALL participants in batches to get complete trade IDs
       const participants = [];
-      const batchSize = 1000;
+      const batchSize = 5000;
       let batchOffset = 0;
 
       while (batchOffset < totalParticipants) {
@@ -68,6 +68,11 @@ export async function GET(request: NextRequest) {
 
         if (twapId) {
           participantQuery = participantQuery.eq('twap_id', parseInt(twapId));
+        }
+
+        // Filter by participant side (side is now on participants table)
+        if (side && (side === 'A' || side === 'B')) {
+          participantQuery = participantQuery.eq('side', side);
         }
 
         const { data: batch, error: partError } = await participantQuery;
@@ -94,9 +99,9 @@ export async function GET(request: NextRequest) {
       // Step 3: Get unique trade IDs
       const tradeIds = Array.from(new Set(participants.map(p => p.trade_id)));
 
-      // Step 4: Fetch the actual trades with filters (in batches if more than 1000)
+      // Step 4: Fetch the actual trades with filters (limit batch size for .in() filter)
       const allTrades = [];
-      const tradeBatchSize = 1000;
+      const tradeBatchSize = 1000; // Keep at 1000 for .in() queries to avoid "Bad Request"
       
       for (let i = 0; i < tradeIds.length; i += tradeBatchSize) {
         const batchIds = tradeIds.slice(i, i + tradeBatchSize);
@@ -111,9 +116,8 @@ export async function GET(request: NextRequest) {
           tradeQuery = tradeQuery.eq('coin', coin.toUpperCase());
         }
 
-        if (side && (side === 'A' || side === 'B')) {
-          tradeQuery = tradeQuery.eq('side', side);
-        }
+        // Note: side filtering is done at participant level (above)
+        // since side is now on trade_participants table, not trades table
 
         if (startTime) {
           tradeQuery = tradeQuery.gte('time', startTime);
@@ -189,6 +193,77 @@ export async function GET(request: NextRequest) {
     }
 
     // Standard query with max 1000 limit
+    // Note: If filtering by side, we need a different approach since side is on participants table
+    if (side && (side === 'A' || side === 'B')) {
+      // Get trades that have a participant with the specified side
+      const { data: participantsWithSide, error: partError } = await supabase
+        .from('trade_participants')
+        .select('trade_id')
+        .eq('side', side)
+        .limit(10000); // Get a large batch
+
+      if (partError) {
+        return NextResponse.json({ error: partError.message }, { status: 500 });
+      }
+
+      const tradeIdsWithSide = Array.from(new Set(participantsWithSide?.map(p => p.trade_id) || []));
+      
+      let query = supabase
+        .from('trades')
+        .select('*', { count: 'exact' })
+        .in('id', tradeIdsWithSide)
+        .order('time', { ascending: false })
+        .range(offset, offset + requestedLimit - 1);
+
+      if (coin) query = query.eq('coin', coin.toUpperCase());
+      if (startTime) query = query.gte('time', startTime);
+      if (endTime) query = query.lte('time', endTime);
+
+      const { data: trades, error, count } = await query;
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      if (!trades || trades.length === 0) {
+        return NextResponse.json({
+          data: [],
+          count: 0,
+          limit: requestedLimit,
+          offset,
+        });
+      }
+
+      // Attach participants if requested
+      if (includeParticipants) {
+        const tradeIds = trades.map(t => t.id);
+        const { data: participants } = await supabase
+          .from('trade_participants')
+          .select('*')
+          .in('trade_id', tradeIds);
+
+        const participantMap = new Map<number, any[]>();
+        participants?.forEach(p => {
+          if (!participantMap.has(p.trade_id)) {
+            participantMap.set(p.trade_id, []);
+          }
+          participantMap.get(p.trade_id)!.push(p);
+        });
+
+        trades.forEach(trade => {
+          (trade as any).participants = participantMap.get(trade.id) || [];
+        });
+      }
+
+      return NextResponse.json({
+        data: trades,
+        count: count || 0,
+        limit: requestedLimit,
+        offset,
+      });
+    }
+
+    // No side filter - standard query
     let query = supabase
       .from('trades')
       .select('*', { count: 'exact' })
@@ -196,7 +271,6 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + requestedLimit - 1);
 
     if (coin) query = query.eq('coin', coin.toUpperCase());
-    if (side && (side === 'A' || side === 'B')) query = query.eq('side', side);
     if (startTime) query = query.gte('time', startTime);
     if (endTime) query = query.lte('time', endTime);
 
@@ -253,112 +327,6 @@ export async function GET(request: NextRequest) {
       limit: requestedLimit,
       offset,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
-}
-
-// POST /api/trades - Insert new trade data
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { coin, side, time, px, sz, hash, trade_dir_override, participants } = body;
-
-    // Validate required fields (side is optional at trade level for backwards compatibility)
-    if (!coin || !time || px === undefined || sz === undefined || !hash || !participants) {
-      return NextResponse.json(
-        { 
-          error: 'Missing required fields: coin, time, px, sz, hash, participants',
-          received: Object.keys(body),
-        },
-        { status: 400 }
-      );
-    }
-
-    // Validate participants is an array
-    if (!Array.isArray(participants) || participants.length === 0) {
-      return NextResponse.json(
-        { error: 'participants must be a non-empty array' },
-        { status: 400 }
-      );
-    }
-
-    // Validate that each participant has a side (use trade-level side as fallback for backwards compatibility)
-    for (const p of participants) {
-      if (!p.side && !side) {
-        return NextResponse.json(
-          { error: 'Each participant must have a side field (A or B), or provide side at trade level' },
-          { status: 400 }
-        );
-      }
-      const participantSide = p.side || side;
-      if (participantSide !== 'A' && participantSide !== 'B') {
-        return NextResponse.json(
-          { error: 'participant side must be either "A" or "B"' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Insert trade first (keep side for backwards compatibility with existing tables)
-    const { data: tradeData, error: tradeError } = await supabase
-      .from('trades')
-      .insert([
-        {
-          coin,
-          side: side || participants[0]?.side || 'A', // Use first participant's side as fallback
-          time,
-          px: typeof px === 'string' ? parseFloat(px) : px,
-          sz: typeof sz === 'string' ? parseFloat(sz) : sz,
-          hash,
-          trade_dir_override: trade_dir_override || null,
-        },
-      ])
-      .select()
-      .single();
-
-    if (tradeError || !tradeData) {
-      return NextResponse.json(
-        { error: tradeError?.message || 'Failed to insert trade' },
-        { status: 500 }
-      );
-    }
-
-    // Insert participants (with side field)
-    const participantRecords = participants.map((p: any) => ({
-      trade_id: tradeData.id,
-      user_address: p.user_address || p.user,
-      side: p.side || side, // Use participant's side or fall back to trade-level side
-      start_pos: typeof p.start_pos === 'string' ? parseFloat(p.start_pos) : p.start_pos,
-      oid: p.oid,
-      twap_id: p.twap_id || null,
-      cloid: p.cloid || null,
-    }));
-
-    const { data: participantData, error: participantError } = await supabase
-      .from('trade_participants')
-      .insert(participantRecords)
-      .select();
-
-    if (participantError) {
-      // Rollback trade if participants fail
-      await supabase.from('trades').delete().eq('id', tradeData.id);
-      return NextResponse.json(
-        { error: participantError.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      data: {
-        ...tradeData,
-        participants: participantData,
-      },
-      message: 'Trade and participants inserted successfully',
-    }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },

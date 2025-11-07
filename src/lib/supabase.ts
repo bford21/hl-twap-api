@@ -28,7 +28,6 @@ export interface TradeParticipant {
 export interface TradeWithParticipants {
   id: number;
   coin: string;
-  side: string;
   time: string;
   px: number;
   sz: number;
@@ -45,7 +44,6 @@ export type Database = {
         Row: {
           id: number;
           coin: string;
-          side: string;
           time: string;
           px: number;
           sz: number;
@@ -56,7 +54,6 @@ export type Database = {
         Insert: {
           id?: number;
           coin: string;
-          side: string;
           time: string;
           px: number;
           sz: number;
@@ -67,7 +64,6 @@ export type Database = {
         Update: {
           id?: number;
           coin?: string;
-          side?: string;
           time?: string;
           px?: number;
           sz?: number;

@@ -5,13 +5,13 @@ import { useState, useEffect } from 'react';
 interface Trade {
   id: number;
   coin: string;
-  side: string;
   time: string;
   px: number;
   sz: number;
   hash: string;
   participants?: Array<{
     user_address: string;
+    side: string; // 'A' = Ask/Sell, 'B' = Bid/Buy
     twap_id: number | null;
     oid: number;
   }>;
@@ -836,16 +836,23 @@ export default function Home() {
                       </td>
                       <td style={{ padding: '0.75rem', fontWeight: '600' }}>{trade.coin}</td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '3px',
-                          background: trade.side === 'A' ? '#fee' : '#efe',
-                          color: trade.side === 'A' ? '#c00' : '#0c0',
-                          fontSize: '0.85rem',
-                          fontWeight: '500'
-                        }}>
-                          {trade.side === 'A' ? 'Sell' : 'Buy'}
-                        </span>
+                        {(() => {
+                          // Get side from TWAP participant (participant with twap_id)
+                          const twapParticipant = trade.participants?.find(p => p.twap_id);
+                          const side = twapParticipant?.side || '?';
+                          return (
+                            <span style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '3px',
+                              background: side === 'A' ? '#fee' : '#efe',
+                              color: side === 'A' ? '#c00' : '#0c0',
+                              fontSize: '0.85rem',
+                              fontWeight: '500'
+                            }}>
+                              {side === 'A' ? 'Sell' : side === 'B' ? 'Buy' : '?'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
                         {trade.px.toLocaleString()}

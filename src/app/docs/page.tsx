@@ -117,7 +117,6 @@ export default function ApiDocs() {
     {
       "id": 123,
       "coin": "BTC",
-      "side": "A",
       "time": "2025-03-22T10:30:00.000Z",
       "px": 83917.0,
       "sz": 0.5,
@@ -125,6 +124,7 @@ export default function ApiDocs() {
       "participants": [
         {
           "user_address": "0xabc...",
+          "side": "B",
           "twap_id": 568722,
           "oid": 12345
         }
