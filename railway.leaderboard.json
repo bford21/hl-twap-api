@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm run cron",
+    "startCommand": "npm run update:leaderboard",
     "restartPolicyType": "NEVER"
   }
 }

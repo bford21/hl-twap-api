@@ -193,7 +193,48 @@ npm run import:all /path/to/hl-data -- --migrate-only
 ## Database Schema
 
 **trades** - Core trade information  
-**trade_participants** - Participant details with `twap_id` (2 rows per trade_id representing each side of the trade. A min of 1 side of the trade will have a twap_id)
+**trade_participants** - Participant details with `twap_id` (2 rows per trade_id representing each side of the trade. A min of 1 side of the trade will have a twap_id)  
+**leaderboard_stats** - Cached leaderboard rankings (top 100 users by TWAP volume)
+
+## Leaderboard Setup
+
+The leaderboard tracks top TWAP traders by volume. Due to the large dataset (75M+ rows), we use a two-phase approach:
+
+### Phase 1: Initial Setup (One-Time, via psql)
+
+Run the heavy computation once directly via psql (avoids timeouts):
+
+```bash
+# Using helper script (automatically loads .env)
+./scripts/connect-psql.sh scripts/initial-leaderboard-setup.sql
+
+# Or manually (replace YOUR_PROJECT_REF and YOUR_PASSWORD)
+psql "postgresql://postgres.YOUR_PROJECT_REF:YOUR_PASSWORD@aws-1-us-east-1.pooler.supabase.com:5432/postgres" \
+  -f scripts/initial-leaderboard-setup.sql
+```
+
+This takes 5-15 minutes and populates the `leaderboard_stats` table with the top 100 users.
+
+### Phase 2: Regular Updates (Fast, via Node.js)
+
+After initial setup, use the delta update script for fast incremental updates:
+
+```bash
+npm run update:leaderboard:delta
+```
+
+This script:
+- Checks for trades added since last update
+- Recalculates rankings for affected users
+- Runs in 5-30 seconds (vs 5-15 minutes for full recalc)
+
+**Schedule regular updates:**
+```bash
+# Via cron (every hour)
+0 * * * * cd /path/to/hl-twap-api && npm run update:leaderboard:delta >> logs/leaderboard.log 2>&1
+```
+
+📖 **Full setup guide:** See [`scripts/LEADERBOARD_SETUP.md`](scripts/LEADERBOARD_SETUP.md) for detailed instructions and troubleshooting.
 
 ## Deploy to Railway
 

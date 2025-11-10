@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Leaderboard from '@/components/Leaderboard';
 
 interface Trade {
   id: number;
@@ -40,6 +41,8 @@ interface TwapSummaryResults {
     total_trades: number;
     total_volume: number;
   };
+  rank?: number | null;
+  total_traders?: number | null;
 }
 
 export default function Home() {
@@ -60,6 +63,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [twapDetailPage, setTwapDetailPage] = useState(1);
+  const [twapSummaryPage, setTwapSummaryPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSearch = async (page: number = 1) => {
@@ -82,6 +86,7 @@ export default function Home() {
         setTwapSummaries(data);
         setResults(null);
         setSelectedTwapId(null);
+        setTwapSummaryPage(1); // Reset to page 1 when new search
       } else {
         // Regular trade search
         const params = new URLSearchParams();
@@ -170,7 +175,38 @@ export default function Home() {
     setError('');
     setCurrentPage(1);
     setTwapDetailPage(1);
+    setTwapSummaryPage(1);
     setShowAdvanced(false);
+  };
+
+  const handleLeaderboardUserClick = async (userAddress: string) => {
+    // Set the user filter and trigger a search
+    setFilters(prev => ({ ...prev, user: userAddress }));
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/trades/summary?user=${encodeURIComponent(userAddress)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch TWAP summaries');
+      }
+
+      setTwapSummaries(data);
+      setResults(null);
+      setSelectedTwapId(null);
+      setTwapSummaryPage(1);
+      
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setResults(null);
+      setTwapSummaries(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -589,6 +625,9 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Leaderboard - Only visible when no search results */}
+      {!results && !twapSummaries && <Leaderboard onUserClick={handleLeaderboardUserClick} />}
+
       {/* Error Message */}
       {error && (
         <div style={{ 
@@ -615,22 +654,65 @@ export default function Home() {
           margin: '0 auto',
           padding: '0 1.5rem 2rem'
         }}>
-          {/* Warning Box */}
+          {/* Rank and Warning - Side by Side */}
           <div style={{
-            background: '#fff3cd',
-            border: '2px solid #ffc107',
-            borderRadius: '8px',
-            padding: '1rem 1.25rem',
+            display: 'flex',
+            gap: '1.5rem',
             marginTop: '2rem',
             marginBottom: '2rem',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.75rem'
+            flexWrap: 'wrap'
           }}>
-            <span style={{ fontSize: '1.25rem' }}>⚠️</span>
-            <span style={{ color: '#856404', fontWeight: '500', fontSize: '0.95rem' }}>
-              Data may be incomplete — please treat this tool as experimental
-            </span>
+            {/* Rank Display */}
+            {twapSummaries.rank ? (
+              <div style={{
+                flex: '1',
+                minWidth: '300px',
+                padding: '1.5rem',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '12px',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+              }}>
+                <div style={{ fontSize: '3rem' }}>
+                  {twapSummaries.rank === 1 && '🥇'}
+                  {twapSummaries.rank === 2 && '🥈'}
+                  {twapSummaries.rank === 3 && '🥉'}
+                  {twapSummaries.rank > 3 && '🏆'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Leaderboard Rank</div>
+                  <div style={{ fontSize: '2.5rem', fontWeight: '700', fontFamily: 'monospace', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                    <span>#{twapSummaries.rank.toLocaleString()}</span>
+                    {twapSummaries.total_traders && (
+                      <span style={{ fontSize: '0.9rem', opacity: 0.8, fontWeight: '400' }}>
+                        / {twapSummaries.total_traders.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Warning Box */}
+            <div style={{
+              flex: '1',
+              minWidth: '300px',
+              background: '#fff3cd',
+              border: '2px solid #ffc107',
+              borderRadius: '12px',
+              padding: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+              <span style={{ color: '#856404', fontWeight: '500', fontSize: '0.95rem' }}>
+                Data may be incomplete — please treat this tool as experimental
+              </span>
+            </div>
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
@@ -661,71 +743,178 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <h2 style={{ margin: 0 }}>
-              TWAP Orders <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({twapSummaries.count} total)</span>
-            </h2>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>Click on a row to view detailed trades</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>
+                TWAP Orders <span style={{ color: '#666', fontWeight: 'normal', fontSize: '1rem' }}>({twapSummaries.count} total)</span>
+              </h2>
+              <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem', marginBottom: 0 }}>Click on a row to view detailed trades</p>
+            </div>
+            {twapSummaries.data.length > 0 && (
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                Showing {((twapSummaryPage - 1) * 10) + 1} - {Math.min(twapSummaryPage * 10, twapSummaries.count)} of {twapSummaries.count}
+              </div>
+            )}
           </div>
 
           {twapSummaries.data.length === 0 ? (
             <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>No TWAP orders found for this wallet</p>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                <thead>
-                  <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>TWAP ID</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Address</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Side</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Coin</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Trades</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Total Volume</th>
-                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Avg Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {twapSummaries.data.map((summary) => (
-                    <tr 
-                      key={summary.twap_id} 
-                      className="clickable-row"
-                      onClick={() => handleTwapClick(summary.twap_id)}
-                      style={{ borderBottom: '1px solid #eee' }}
-                    >
-                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: '600' }}>
-                        {summary.twap_id}
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem' }}>
-                        <span 
-                          style={{ 
-                            fontSize: '0.85rem',
-                            background: '#f5f5f5',
-                            padding: '0.2rem 0.4rem',
-                            borderRadius: '3px',
-                            color: '#555',
-                            fontFamily: 'monospace',
-                          }}
-                          title={summary.address}
-                        >
-                          {summary.address.slice(0, 6)}...{summary.address.slice(-4)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem' }}>{summary.side}</td>
-                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: '600' }}>{summary.coin}</td>
-                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
-                        {summary.trade_count}
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace', fontWeight: '600' }}>
-                        ${summary.total_volume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
-                        ${summary.avg_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                      </td>
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>TWAP ID</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Address</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Side</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'left' }}>Coin</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Trades</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Total Volume</th>
+                      <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Avg Price</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {twapSummaries.data.slice((twapSummaryPage - 1) * 10, twapSummaryPage * 10).map((summary) => (
+                      <tr 
+                        key={summary.twap_id} 
+                        className="clickable-row"
+                        onClick={() => handleTwapClick(summary.twap_id)}
+                        style={{ borderBottom: '1px solid #eee' }}
+                      >
+                        <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: '600' }}>
+                          {summary.twap_id}
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>
+                          <span 
+                            style={{ 
+                              fontSize: '0.85rem',
+                              background: '#f5f5f5',
+                              padding: '0.2rem 0.4rem',
+                              borderRadius: '3px',
+                              color: '#555',
+                              fontFamily: 'monospace',
+                            }}
+                            title={summary.address}
+                          >
+                            {summary.address.slice(0, 6)}...{summary.address.slice(-4)}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>{summary.side}</td>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: '600' }}>{summary.coin}</td>
+                        <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                          {summary.trade_count}
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace', fontWeight: '600' }}>
+                          ${summary.total_volume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                          ${summary.avg_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {(() => {
+                const totalPages = Math.ceil(twapSummaries.count / 10);
+
+                if (totalPages <= 1) return null;
+
+                return (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginTop: '2rem',
+                    padding: '1rem',
+                    background: '#f9f9f9',
+                    borderRadius: '8px',
+                    flexWrap: 'wrap',
+                    gap: '1rem'
+                  }}>
+                    <button
+                      onClick={() => setTwapSummaryPage(1)}
+                      disabled={twapSummaryPage === 1}
+                      style={{
+                        padding: '0.5rem 1.5rem',
+                        background: twapSummaryPage === 1 ? '#e5e5e5' : '#000',
+                        color: twapSummaryPage === 1 ? '#999' : 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: twapSummaryPage === 1 ? 'not-allowed' : 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      ⏮ First
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                        Page {twapSummaryPage} of {totalPages}
+                      </span>
+                      {totalPages > 1 && (
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (twapSummaryPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (twapSummaryPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = twapSummaryPage - 2 + i;
+                            }
+
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setTwapSummaryPage(pageNum)}
+                                style={{
+                                  padding: '0.5rem 0.75rem',
+                                  background: twapSummaryPage === pageNum ? '#667eea' : 'white',
+                                  color: twapSummaryPage === pageNum ? 'white' : '#333',
+                                  border: twapSummaryPage === pageNum ? 'none' : '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.85rem',
+                                  fontWeight: twapSummaryPage === pageNum ? '600' : '400',
+                                  minWidth: '2rem'
+                                }}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setTwapSummaryPage(totalPages)}
+                      disabled={twapSummaryPage >= totalPages}
+                      style={{
+                        padding: '0.5rem 1.5rem',
+                        background: twapSummaryPage >= totalPages ? '#e5e5e5' : '#000',
+                        color: twapSummaryPage >= totalPages ? '#999' : 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: twapSummaryPage >= totalPages ? 'not-allowed' : 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Last ⏭
+                    </button>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </div>
       )}
@@ -927,7 +1116,7 @@ export default function Home() {
                 gap: '1rem'
               }}>
                 <button
-                  onClick={() => handlePageChange(page - 1)}
+                  onClick={() => handlePageChange(1)}
                   disabled={page === 1 || loading}
                   style={{
                     padding: '0.5rem 1.5rem',
@@ -940,7 +1129,7 @@ export default function Home() {
                     fontWeight: '500'
                   }}
                 >
-                  ← Previous
+                  ⏮ First
                 </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -988,7 +1177,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => handlePageChange(page + 1)}
+                  onClick={() => handlePageChange(totalPages)}
                   disabled={page >= totalPages || loading}
                   style={{
                     padding: '0.5rem 1.5rem',
@@ -1001,7 +1190,7 @@ export default function Home() {
                     fontWeight: '500'
                   }}
                 >
-                  Next →
+                  Last ⏭
                 </button>
               </div>
             );
