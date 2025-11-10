@@ -65,6 +65,23 @@ export default function Home() {
   const [twapDetailPage, setTwapDetailPage] = useState(1);
   const [twapSummaryPage, setTwapSummaryPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [maxTradeId, setMaxTradeId] = useState<number | null>(null);
+
+  // Fetch stats on component mount
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+        if (response.ok && data.max_trade_id) {
+          setMaxTradeId(data.max_trade_id);
+        }
+      } catch (err) {
+        console.error('Failed to fetch stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleSearch = async (page: number = 1) => {
     setLoading(true);
@@ -390,7 +407,7 @@ export default function Home() {
             fontSize: '0.85rem',
             fontFamily: 'monospace'
           }}>
-            {(73548026).toLocaleString()} trades indexed
+            {maxTradeId ? maxTradeId.toLocaleString() : '...'} trades indexed
           </div>
         </div>
 

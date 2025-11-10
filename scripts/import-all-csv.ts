@@ -459,14 +459,22 @@ async function main() {
     await client.query('BEGIN');
     
     try {
-      // Insert trades
+      // Insert trades (explicitly specify columns, excluding id which is auto-generated)
       console.log(`  ⏳ Inserting trades...`);
-      await client.query('INSERT INTO trades SELECT * FROM trades_staging');
+      await client.query(`
+        INSERT INTO trades (id, coin, time, px, sz, hash, trade_dir_override)
+        SELECT id, coin, time, px, sz, hash, trade_dir_override
+        FROM trades_staging
+      `);
       console.log(`  ✓ Trades inserted`);
       
-      // Insert participants
+      // Insert participants (explicitly specify columns, excluding id and created_at)
       console.log(`  ⏳ Inserting participants...`);
-      await client.query('INSERT INTO trade_participants SELECT * FROM trade_participants_staging');
+      await client.query(`
+        INSERT INTO trade_participants (trade_id, user_address, side, start_pos, oid, twap_id, cloid)
+        SELECT trade_id, user_address, side, start_pos, oid, twap_id, cloid
+        FROM trade_participants_staging
+      `);
       console.log(`  ✓ Participants inserted`);
       
       // Commit transaction

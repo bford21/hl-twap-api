@@ -13,6 +13,8 @@
     "lint": "next lint",
     "sync:data": "tsx src/jobs/sync-data.ts",
     "generate:all": "tsx scripts/generate-all-csv.ts",
+    "generate:fills": "tsx scripts/generate-node-fills-by-block-csv.ts",
+    "generate:trades": "tsx scripts/generate-node-trades-csv.ts",
     "import:all": "tsx scripts/import-all-csv.ts",
     "update:leaderboard": "tsx scripts/update-leaderboard.ts"
   },
