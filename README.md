@@ -66,7 +66,43 @@ CREATE INDEX idx_participants_twap_id ON trade_participants(twap_id) WHERE twap_
 CREATE INDEX idx_participants_trade_id ON trade_participants(trade_id);
 CREATE INDEX idx_participants_side ON trade_participants(side);
 CREATE INDEX idx_participants_user_address ON trade_participants(user_address);
+
+-- Staging tables (for bulk imports)
+CREATE TABLE trades_staging (
+  id BIGINT NOT NULL,
+  coin TEXT NOT NULL,
+  time TIMESTAMPTZ NOT NULL,
+  px NUMERIC NOT NULL,
+  sz NUMERIC NOT NULL,
+  hash TEXT NOT NULL,
+  trade_dir_override TEXT
+);
+
+CREATE TABLE trade_participants_staging (
+  trade_id BIGINT NOT NULL,
+  user_address TEXT NOT NULL,
+  side TEXT NOT NULL,
+  start_pos NUMERIC NOT NULL,
+  oid BIGINT NOT NULL,
+  twap_id BIGINT,
+  cloid TEXT
+);
+
+-- Leaderboard table (populated by cron job)
+CREATE TABLE leaderboard_stats (
+  user_address TEXT PRIMARY KEY,
+  total_volume NUMERIC NOT NULL,
+  total_trades INTEGER NOT NULL,
+  unique_twaps INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  last_updated TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_leaderboard_rank ON leaderboard_stats(rank);
+CREATE INDEX idx_leaderboard_volume ON leaderboard_stats(total_volume DESC);
 ```
+
+**Note:** Staging tables have no indexes or constraints for maximum import speed. Data is validated before migrating to production tables.
 
 ### 4. Download All Historical Data
 
@@ -141,6 +177,8 @@ Full API documentation available at https://twaptracker.xyz/docs
 - `GET /api/twap/:id` - Get all trades and statistics for a specific TWAP ID
 - `GET /api/trades/summary` - Get TWAP order summary for a wallet address with aggregate stats
 - `GET /api/trades/stats` - Aggregated trade statistics by coin over time
+- `GET /api/leaderboard` - Get top TWAP traders ranked by volume (cached, updated daily)
+- `GET /api/stats` - Get general database statistics (max trade ID, total traders)
 - `GET /api/health` - Health check endpoint
 
 **Examples:**
@@ -153,6 +191,12 @@ GET /api/trades/summary?user=0xabc...
 
 # Get TWAP details with statistics
 GET /api/twap/568722
+
+# Get leaderboard (top 10)
+GET /api/leaderboard?limit=10
+
+# Get database stats
+GET /api/stats
 ```
 
 ## Scripts

@@ -417,6 +417,60 @@ export default function ApiDocs() {
           </div>
         </div>
 
+        {/* GET /api/stats */}
+        <div style={{ 
+          marginBottom: '2.5rem',
+          background: '#fafafa',
+          padding: '1.5rem',
+          borderRadius: '8px',
+          border: '1px solid #e5e5e5'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <span style={{ 
+              background: '#10b981', 
+              color: 'white', 
+              padding: '0.25rem 0.75rem', 
+              borderRadius: '4px',
+              fontSize: '0.85rem',
+              fontWeight: '600'
+            }}>
+              GET
+            </span>
+            <code style={{ fontSize: '1.1rem', fontWeight: '600' }}>/api/stats</code>
+          </div>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>
+            Get general database statistics including total trades indexed and trader count. Cached for 5 minutes.
+          </p>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Query Parameters:</strong>
+            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
+              <div style={{ color: '#666' }}>None - this endpoint requires no parameters</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Example:</strong>
+            <pre style={{ 
+              background: '#1e293b', 
+              color: '#e2e8f0', 
+              padding: '1rem', 
+              borderRadius: '6px',
+              overflow: 'auto',
+              fontSize: '0.85rem',
+              lineHeight: '1.5'
+            }}>
+{`curl "https://twaptracker.xyz/api/stats"
+
+# Response
+{
+  "max_trade_id": 73548026,
+  "total_traders": 1234
+}`}
+            </pre>
+          </div>
+        </div>
+
         {/* Rate Limits & Authentication */}
         <div style={{ 
           background: '#fff3cd',
