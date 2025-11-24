@@ -947,7 +947,7 @@ export default function Home() {
                 }}
               >
                 <span>{exportingCsv ? '⏳' : '📥'}</span>
-                {exportingCsv ? 'Generating CSV...' : 'Export All Trades to CSV'}
+                {exportingCsv ? 'Generating CSV...' : 'Download CSV'}
               </button>
             </div>
             <div style={{ overflowX: 'auto' }}>
