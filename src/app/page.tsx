@@ -815,7 +815,7 @@ export default function Home() {
                 margin: 0,
                 fontStyle: 'italic'
               }}>
-                Please don't close this page
+                Please don&apos;t close this page
               </p>
             </div>
           </div>
