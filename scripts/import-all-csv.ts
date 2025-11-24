@@ -132,6 +132,66 @@ async function importDay(
   }
 }
 
+async function importDayDirect(
+  client: Client,
+  day: DayCsvs,
+  stats: ImportStats
+): Promise<void> {
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`📅 Importing ${day.dayName} (${day.source}) → production`);
+  console.log(`${'='.repeat(70)}`);
+  
+  try {
+    const startTime = Date.now();
+    
+    // Get file sizes for progress info
+    const tradesLines = getLineCount(day.tradesPath);
+    const participantsLines = getLineCount(day.participantsPath);
+    
+    console.log(`  📊 Expected: ${tradesLines.toLocaleString()} trades, ${participantsLines.toLocaleString()} participants`);
+    
+    // Import trades to PRODUCTION using COPY FROM STDIN
+    console.log(`  ⏳ Importing trades to production...`);
+    const tradesStart = Date.now();
+    
+    const tradesStream = client.query(
+      copyFrom(`COPY trades(id, coin, time, px, sz, hash, trade_dir_override) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
+    );
+    const tradesFileStream = fs.createReadStream(day.tradesPath);
+    await pipeline(tradesFileStream, tradesStream);
+    
+    const tradesDuration = Date.now() - tradesStart;
+    console.log(`  ✓ Trades imported in ${(tradesDuration / 1000).toFixed(2)}s`);
+    
+    // Import participants to PRODUCTION using COPY FROM STDIN
+    console.log(`  ⏳ Importing participants to production...`);
+    const participantsStart = Date.now();
+    
+    const participantsStream = client.query(
+      copyFrom(`COPY trade_participants(trade_id, user_address, side, start_pos, oid, twap_id, cloid) FROM STDIN WITH (FORMAT csv, NULL '\\N')`)
+    );
+    const participantsFileStream = fs.createReadStream(day.participantsPath);
+    await pipeline(participantsFileStream, participantsStream);
+    
+    const participantsDuration = Date.now() - participantsStart;
+    console.log(`  ✓ Participants imported in ${(participantsDuration / 1000).toFixed(2)}s`);
+    
+    const totalDuration = Date.now() - startTime;
+    const tradesRate = tradesLines / (totalDuration / 1000);
+    
+    console.log(`  📈 Total: ${totalDuration / 1000}s | Rate: ${tradesRate.toFixed(0)} trades/sec`);
+    
+    stats.daysProcessed++;
+    stats.tradesImported += tradesLines;
+    stats.participantsImported += participantsLines;
+    
+  } catch (error) {
+    console.error(`  ❌ Error importing ${day.dayName}:`, error);
+    stats.errors++;
+    throw error; // Re-throw to stop processing
+  }
+}
+
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -148,6 +208,7 @@ async function main() {
   const skipSequence = args.includes('--skip-sequence');
   const stagingOnly = args.includes('--staging-only');
   const migrateOnly = args.includes('--migrate-only');
+  const direct = args.includes('--direct');
   
   // Parse --start-date parameter
   const startDateArg = args.find(arg => arg.startsWith('--start-date='));
@@ -162,7 +223,7 @@ async function main() {
   console.log('🚀 Unified PostgreSQL CSV Import Script (with Staging Tables)');
   console.log('='.repeat(70));
   console.log(`Base directory: ${baseDir}`);
-  console.log(`Mode: ${stagingOnly ? 'STAGING ONLY (will not migrate)' : migrateOnly ? 'MIGRATE ONLY (expects staging loaded)' : 'FULL (staging + migration)'}`);
+  console.log(`Mode: ${direct ? 'DIRECT (skip staging, COPY to production)' : stagingOnly ? 'STAGING ONLY (will not migrate)' : migrateOnly ? 'MIGRATE ONLY (expects staging loaded)' : 'FULL (staging + migration)'}`);
   console.log(`Skip sequence update: ${skipSequence ? 'Yes' : 'No'}`);
   if (startDate) {
     console.log(`Start date filter: ${startDate} (${startDate.substring(0,4)}-${startDate.substring(4,6)}-${startDate.substring(6,8)})`);
@@ -175,8 +236,12 @@ async function main() {
   }
 
   // Validate mutually exclusive flags
-  if (stagingOnly && migrateOnly) {
-    console.error('❌ Error: Cannot use both --staging-only and --migrate-only flags simultaneously.');
+  if ([stagingOnly, migrateOnly, direct].filter(Boolean).length > 1) {
+    console.error('❌ Error: Cannot use --staging-only, --migrate-only, and --direct flags together.');
+    console.error('   Choose ONE mode:');
+    console.error('   --staging-only:  Load to staging tables only');
+    console.error('   --migrate-only:  Migrate from staging to production');
+    console.error('   --direct:        Skip staging, COPY directly to production');
     process.exit(1);
   }
 
@@ -214,7 +279,7 @@ async function main() {
   let csvPairs: DayCsvs[] = [];
   
   if (!migrateOnly) {
-    console.log(`\n🔍 Scanning for CSV files...`);
+    console.log(`\n🔍 Scanning for CSV files...${direct ? ' (direct import mode)' : ''}`);
     
     // Scan node_trades directory
     const nodeTradesDir = path.join(baseDir, 'node_trades');
@@ -290,6 +355,12 @@ async function main() {
       console.log('\n📋 Phase 1: LOAD TO STAGING');
       console.log('   Will load all CSVs into staging tables');
       console.log('   ⚠️  Will NOT migrate to production (use --migrate-only later)');
+    } else if (direct) {
+      console.log('\n📋 Import Strategy: DIRECT TO PRODUCTION');
+      console.log('   ⚡ Fast mode: COPY directly to production tables');
+      console.log('   ⚠️  No staging tables used - imports directly with constraints');
+      console.log('   ✓ ID conflicts checked before import');
+      console.log('   ✓ Sequence updated after import');
     } else {
       console.log('\n📋 Import Strategy: STAGING → PRODUCTION');
       console.log('   1. Load all CSVs into staging tables (fast, no constraints)');
@@ -374,11 +445,15 @@ async function main() {
     const maxIdBefore = beforeRows[0]?.max || 0;
     console.log(`📊 Current max trade ID: ${maxIdBefore.toLocaleString()}\n`);
 
-    // Phase 1: Load CSVs to staging (skip if --migrate-only)
+    // Phase 1: Load CSVs (skip if --migrate-only)
     if (!migrateOnly) {
       // Import each day
       for (let i = 0; i < csvPairs.length; i++) {
-        await importDay(client, csvPairs[i], stats);
+        if (direct) {
+          await importDayDirect(client, csvPairs[i], stats);
+        } else {
+          await importDay(client, csvPairs[i], stats);
+        }
         
         // Print progress summary every 10 days
         if ((i + 1) % 10 === 0 || i === csvPairs.length - 1) {
@@ -394,100 +469,103 @@ async function main() {
       }
     }
 
-    // Verify staging data
-    console.log(`\n${'='.repeat(70)}`);
-    console.log('🔍 Verifying Staging Data');
-    console.log('='.repeat(70));
-    
-    const { rows: stagingTradesRows } = await client.query('SELECT COUNT(*), MIN(id), MAX(id) FROM trades_staging');
-    const { rows: stagingParticipantsRows } = await client.query('SELECT COUNT(*) FROM trade_participants_staging');
-    
-    const stagingTradesCount = parseInt(stagingTradesRows[0].count);
-    const stagingMinId = stagingTradesRows[0].min;
-    const stagingMaxId = stagingTradesRows[0].max;
-    const stagingParticipantsCount = parseInt(stagingParticipantsRows[0].count);
-    
-    console.log(`📊 Staging Tables:`);
-    console.log(`   Trades:       ${stagingTradesCount.toLocaleString()}`);
-    console.log(`   Participants: ${stagingParticipantsCount.toLocaleString()}`);
-    console.log(`   ID Range:     ${stagingMinId?.toLocaleString() || 'N/A'} to ${stagingMaxId?.toLocaleString() || 'N/A'}`);
-    
-    // Check for ID conflicts
-    if (stagingMinId && stagingMinId <= maxIdBefore) {
-      console.error(`\n❌ ERROR: ID conflict detected!`);
-      console.error(`   Staging min ID (${stagingMinId}) overlaps with production max ID (${maxIdBefore})`);
-      console.error(`   You need to regenerate CSVs with --start-id=${maxIdBefore + 1}`);
-      process.exit(1);
-    }
-    
-    console.log(`✓ No ID conflicts detected`);
-    
-    // Stop here if --staging-only
-    if (stagingOnly) {
+    // Skip staging verification and migration if using direct mode
+    if (!direct) {
+      // Verify staging data
       console.log(`\n${'='.repeat(70)}`);
-      console.log('✅ Phase 1 Complete: Data Loaded to Staging');
+      console.log('🔍 Verifying Staging Data');
       console.log('='.repeat(70));
-      console.log(`📊 Staging Summary:`);
+      
+      const { rows: stagingTradesRows } = await client.query('SELECT COUNT(*), MIN(id), MAX(id) FROM trades_staging');
+      const { rows: stagingParticipantsRows } = await client.query('SELECT COUNT(*) FROM trade_participants_staging');
+      
+      const stagingTradesCount = parseInt(stagingTradesRows[0].count);
+      const stagingMinId = stagingTradesRows[0].min;
+      const stagingMaxId = stagingTradesRows[0].max;
+      const stagingParticipantsCount = parseInt(stagingParticipantsRows[0].count);
+      
+      console.log(`📊 Staging Tables:`);
       console.log(`   Trades:       ${stagingTradesCount.toLocaleString()}`);
       console.log(`   Participants: ${stagingParticipantsCount.toLocaleString()}`);
       console.log(`   ID Range:     ${stagingMinId?.toLocaleString() || 'N/A'} to ${stagingMaxId?.toLocaleString() || 'N/A'}`);
-      console.log(`\n💡 Next Steps:`);
-      console.log(`   1. Inspect staging tables in Supabase:`);
-      console.log(`      SELECT * FROM trades_staging LIMIT 100;`);
-      console.log(`      SELECT * FROM trade_participants_staging LIMIT 100;`);
-      console.log(`   2. When ready, run migration:`);
-      console.log(`      npm run import:all -- --migrate-only`);
+      
+      // Check for ID conflicts
+      if (stagingMinId && stagingMinId <= maxIdBefore) {
+        console.error(`\n❌ ERROR: ID conflict detected!`);
+        console.error(`   Staging min ID (${stagingMinId}) overlaps with production max ID (${maxIdBefore})`);
+        console.error(`   You need to regenerate CSVs with --start-id=${maxIdBefore + 1}`);
+        process.exit(1);
+      }
+      
+      console.log(`✓ No ID conflicts detected`);
+      
+      // Stop here if --staging-only
+      if (stagingOnly) {
+        console.log(`\n${'='.repeat(70)}`);
+        console.log('✅ Phase 1 Complete: Data Loaded to Staging');
+        console.log('='.repeat(70));
+        console.log(`📊 Staging Summary:`);
+        console.log(`   Trades:       ${stagingTradesCount.toLocaleString()}`);
+        console.log(`   Participants: ${stagingParticipantsCount.toLocaleString()}`);
+        console.log(`   ID Range:     ${stagingMinId?.toLocaleString() || 'N/A'} to ${stagingMaxId?.toLocaleString() || 'N/A'}`);
+        console.log(`\n💡 Next Steps:`);
+        console.log(`   1. Inspect staging tables in Supabase:`);
+        console.log(`      SELECT * FROM trades_staging LIMIT 100;`);
+        console.log(`      SELECT * FROM trade_participants_staging LIMIT 100;`);
+        console.log(`   2. When ready, run migration:`);
+        console.log(`      npm run import:all -- --migrate-only`);
+        console.log('='.repeat(70));
+        
+        await client.end();
+        console.log('\n🔌 Disconnected from database');
+        process.exit(0);
+      }
+      
+      // Phase 2: Migrate from staging to production
+      console.log(`\n${'='.repeat(70)}`);
+      console.log('🚀 Migrating from Staging → Production');
       console.log('='.repeat(70));
+      console.log(`⚠️  This will insert ${stagingTradesCount.toLocaleString()} trades into production.`);
+      console.log(`Press Ctrl+C to cancel, or wait 5 seconds to continue...\n`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
-      await client.end();
-      console.log('\n🔌 Disconnected from database');
-      process.exit(0);
-    }
-    
-    // Phase 2: Migrate from staging to production
-    console.log(`\n${'='.repeat(70)}`);
-    console.log('🚀 Migrating from Staging → Production');
-    console.log('='.repeat(70));
-    console.log(`⚠️  This will insert ${stagingTradesCount.toLocaleString()} trades into production.`);
-    console.log(`Press Ctrl+C to cancel, or wait 5 seconds to continue...\n`);
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    console.log(`⏳ Starting migration (this may take a few minutes)...`);
-    const migrationStart = Date.now();
-    
-    // Use a transaction for safety
-    await client.query('BEGIN');
-    
-    try {
-      // Insert trades (explicitly specify columns, excluding id which is auto-generated)
-      console.log(`  ⏳ Inserting trades...`);
-      await client.query(`
-        INSERT INTO trades (id, coin, time, px, sz, hash, trade_dir_override)
-        SELECT id, coin, time, px, sz, hash, trade_dir_override
-        FROM trades_staging
-      `);
-      console.log(`  ✓ Trades inserted`);
+      console.log(`⏳ Starting migration (this may take a few minutes)...`);
+      const migrationStart = Date.now();
       
-      // Insert participants (explicitly specify columns, excluding id and created_at)
-      console.log(`  ⏳ Inserting participants...`);
-      await client.query(`
-        INSERT INTO trade_participants (trade_id, user_address, side, start_pos, oid, twap_id, cloid)
-        SELECT trade_id, user_address, side, start_pos, oid, twap_id, cloid
-        FROM trade_participants_staging
-      `);
-      console.log(`  ✓ Participants inserted`);
+      // Use a transaction for safety
+      await client.query('BEGIN');
       
-      // Commit transaction
-      await client.query('COMMIT');
-      
-      const migrationDuration = Date.now() - migrationStart;
-      console.log(`\n✅ Migration complete in ${(migrationDuration / 1000).toFixed(2)}s`);
-      
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error(`\n❌ Migration failed! Transaction rolled back.`);
-      console.error(`   Staging tables preserved for inspection.`);
-      throw error;
+      try {
+        // Insert trades (explicitly specify columns, excluding id which is auto-generated)
+        console.log(`  ⏳ Inserting trades...`);
+        await client.query(`
+          INSERT INTO trades (id, coin, time, px, sz, hash, trade_dir_override)
+          SELECT id, coin, time, px, sz, hash, trade_dir_override
+          FROM trades_staging
+        `);
+        console.log(`  ✓ Trades inserted`);
+        
+        // Insert participants (explicitly specify columns, excluding id and created_at)
+        console.log(`  ⏳ Inserting participants...`);
+        await client.query(`
+          INSERT INTO trade_participants (trade_id, user_address, side, start_pos, oid, twap_id, cloid)
+          SELECT trade_id, user_address, side, start_pos, oid, twap_id, cloid
+          FROM trade_participants_staging
+        `);
+        console.log(`  ✓ Participants inserted`);
+        
+        // Commit transaction
+        await client.query('COMMIT');
+        
+        const migrationDuration = Date.now() - migrationStart;
+        console.log(`\n✅ Migration complete in ${(migrationDuration / 1000).toFixed(2)}s`);
+        
+      } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`\n❌ Migration failed! Transaction rolled back.`);
+        console.error(`   Staging tables preserved for inspection.`);
+        throw error;
+      }
     }
     
     // Query final max ID
@@ -507,17 +585,19 @@ async function main() {
       console.log(`   Run manually: SELECT setval('trades_id_seq', ${maxIdAfter});`);
     }
     
-    // Cleanup staging tables
-    console.log(`\n🧹 Cleaning up staging tables...`);
-    await client.query('TRUNCATE trades_staging, trade_participants_staging');
-    console.log(`✓ Staging tables truncated (structure preserved)`);
+    // Cleanup staging tables (only if not direct mode)
+    if (!direct) {
+      console.log(`\n🧹 Cleaning up staging tables...`);
+      await client.query('TRUNCATE trades_staging, trade_participants_staging');
+      console.log(`✓ Staging tables truncated (structure preserved)`);
+    }
 
     // Final summary
     const totalDuration = Date.now() - stats.startTime;
     const finalRate = stats.tradesImported / (totalDuration / 1000);
     
     console.log('\n' + '='.repeat(70));
-    console.log('✅ Import Complete!');
+    console.log(`✅ Import Complete!${direct ? ' (Direct Mode)' : ''}`);
     console.log('='.repeat(70));
     console.log(`Days processed:        ${stats.daysProcessed}`);
     console.log(`Total trades:          ${stats.tradesImported.toLocaleString()}`);
@@ -527,7 +607,7 @@ async function main() {
     console.log(`Average rate:          ${finalRate.toFixed(0)} trades/sec`);
     console.log('='.repeat(70));
 
-    console.log('\n✨ All data imported successfully!');
+    console.log(`\n✨ All data imported successfully${direct ? ' (direct to production)' : ''}!`);
 
   } catch (error) {
     console.error('\n❌ Fatal error during import:', error);
