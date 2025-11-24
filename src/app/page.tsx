@@ -66,6 +66,8 @@ export default function Home() {
   const [twapSummaryPage, setTwapSummaryPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [maxTradeId, setMaxTradeId] = useState<number | null>(null);
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<string>('');
 
   // Fetch stats on component mount
   useEffect(() => {
@@ -226,6 +228,111 @@ export default function Home() {
     }
   };
 
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    setDownloadProgress('Preparing export...');
+    setError('');
+
+    // Prevent accidental navigation
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    try {
+      const params = new URLSearchParams();
+      
+      // Add user or twap_id
+      if (selectedTwapId) {
+        params.append('twap_id', selectedTwapId.toString());
+      } else if (filters.user) {
+        params.append('user', filters.user);
+      } else {
+        throw new Error('No user or TWAP ID selected');
+      }
+
+      // Add optional filters
+      if (filters.coin) params.append('coin', filters.coin);
+      if (filters.side) params.append('side', filters.side);
+      if (filters.start_time) params.append('start_time', filters.start_time);
+      if (filters.end_time) params.append('end_time', filters.end_time);
+
+      setDownloadProgress('Connecting to server...');
+
+      // Fetch the CSV
+      const response = await fetch(`/api/trades/export?${params.toString()}`);
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to export CSV');
+      }
+
+      // Get the filename from the response headers
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'trades.csv';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      setDownloadProgress('Downloading data...');
+
+      // Stream the response with progress tracking
+      const reader = response.body?.getReader();
+      const contentLength = response.headers.get('content-length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+      
+      let receivedLength = 0;
+      const chunks: Uint8Array[] = [];
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          chunks.push(value);
+          receivedLength += value.length;
+          
+          // Update progress
+          if (total > 0) {
+            const percentComplete = Math.round((receivedLength / total) * 100);
+            setDownloadProgress(`Downloading: ${percentComplete}% (${(receivedLength / 1024 / 1024).toFixed(2)} MB)`);
+          } else {
+            setDownloadProgress(`Downloading: ${(receivedLength / 1024 / 1024).toFixed(2)} MB`);
+          }
+        }
+      }
+
+      // Combine chunks into blob
+      const blob = new Blob(chunks as BlobPart[]);
+      
+      setDownloadProgress('Saving file...');
+
+      // Download the file
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setDownloadProgress('Download complete!');
+      setTimeout(() => setDownloadProgress(''), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export CSV');
+      setDownloadProgress('');
+    } finally {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      setExportingCsv(false);
+    }
+  };
+
   return (
     <div style={{ 
       display: 'flex', 
@@ -246,6 +353,14 @@ export default function Home() {
           to { 
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+        @keyframes progress {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(100%);
           }
         }
         .clickable-row {
@@ -642,6 +757,71 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Download Progress Modal */}
+      {exportingCsv && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '2rem',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+            animation: 'fadeIn 0.2s ease-in'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: '3rem',
+                marginBottom: '1rem',
+                animation: 'pulse 2s infinite'
+              }}>
+                📥
+              </div>
+              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem', color: '#333' }}>
+                Exporting CSV
+              </h3>
+              <p style={{ color: '#666', fontSize: '0.95rem', marginBottom: '1.5rem' }}>
+                {downloadProgress || 'Preparing your export...'}
+              </p>
+              <div style={{
+                width: '100%',
+                height: '4px',
+                background: '#e5e5e5',
+                borderRadius: '2px',
+                overflow: 'hidden',
+                marginBottom: '1rem'
+              }}>
+                <div style={{
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #667eea, #764ba2)',
+                  width: '100%',
+                  animation: 'progress 1.5s ease-in-out infinite'
+                }} />
+              </div>
+              <p style={{ 
+                color: '#999', 
+                fontSize: '0.85rem',
+                margin: 0,
+                fontStyle: 'italic'
+              }}>
+                Please don't close this page
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Leaderboard - Only visible when no search results */}
       {!results && !twapSummaries && <Leaderboard onUserClick={handleLeaderboardUserClick} />}
 
@@ -733,7 +913,43 @@ export default function Home() {
           </div>
 
           <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ margin: 0, marginBottom: '1rem' }}>Wallet Stats</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h2 style={{ margin: 0 }}>Wallet Stats</h2>
+              <button
+                onClick={handleExportCsv}
+                disabled={exportingCsv}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  background: exportingCsv ? '#ccc' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: exportingCsv ? 'not-allowed' : 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  boxShadow: exportingCsv ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseOver={(e) => {
+                  if (!exportingCsv) {
+                    e.currentTarget.style.background = '#059669';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!exportingCsv) {
+                    e.currentTarget.style.background = '#10b981';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                <span>{exportingCsv ? '⏳' : '📥'}</span>
+                {exportingCsv ? 'Generating CSV...' : 'Export All Trades to CSV'}
+              </button>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                 <thead>
@@ -944,7 +1160,7 @@ export default function Home() {
           margin: '0 auto',
           padding: '0 1.5rem 2rem'
         }}>
-          <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
             <button
               onClick={handleBackToSummary}
               style={{
@@ -956,7 +1172,6 @@ export default function Home() {
                 cursor: 'pointer',
                 fontSize: '0.9rem',
                 fontWeight: '500',
-                marginBottom: '1rem',
                 transition: 'all 0.2s'
               }}
               onMouseOver={(e) => {
@@ -969,6 +1184,41 @@ export default function Home() {
               }}
             >
               ← Back to TWAP Orders
+            </button>
+            
+            <button
+              onClick={handleExportCsv}
+              disabled={exportingCsv}
+              style={{
+                padding: '0.625rem 1.5rem',
+                background: exportingCsv ? '#ccc' : '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: exportingCsv ? 'not-allowed' : 'pointer',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                boxShadow: exportingCsv ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+              onMouseOver={(e) => {
+                if (!exportingCsv) {
+                  e.currentTarget.style.background = '#059669';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!exportingCsv) {
+                  e.currentTarget.style.background = '#10b981';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
+            >
+              <span>{exportingCsv ? '⏳' : '📥'}</span>
+              {exportingCsv ? 'Generating CSV...' : 'Export TWAP to CSV'}
             </button>
           </div>
 
